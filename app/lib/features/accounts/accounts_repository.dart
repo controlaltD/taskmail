@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 
-import '../../core/config/env.dart';
 import '../../core/supabase/supabase_client.dart';
 import '../../models/email_account.dart';
 import '../auth/auth_controller.dart';
@@ -23,48 +22,32 @@ class AccountsRepository {
 
   final Ref ref;
 
-  String get _functionsBase => '${Env.supabaseUrl}/functions/v1';
+  /// Az engedélykérő URL-t a szerver állítja össze (`oauth-start`), és abban
+  /// `state`-ként csak egy egyszer felhasználható nonce utazik. Korábban itt
+  /// a felhasználó Supabase hozzáférési tokenje került az URL-be, ami a
+  /// Google/Microsoft naplóin és a böngésző előzményein keresztül
+  /// kiszivárogtatta a munkamenetet.
+  Future<bool> _connect(String provider) async {
+    final response = await supabase.functions.invoke(
+      'oauth-start',
+      body: {'provider': provider},
+    );
 
-  Future<bool> connectGmail() async {
-    final session = supabase.auth.currentSession;
-    if (session == null) return false;
+    final authUrl = (response.data as Map?)?['url'] as String?;
+    if (authUrl == null) return false;
 
-    final callbackUrl = '$_functionsBase/gmail-oauth-callback';
-    final authUrl = Uri.https('accounts.google.com', '/o/oauth2/v2/auth', {
-      'client_id': Env.googleClientId,
-      'redirect_uri': callbackUrl,
-      'response_type': 'code',
-      'access_type': 'offline',
-      'prompt': 'consent',
-      'scope': 'https://www.googleapis.com/auth/gmail.readonly',
-      'state': session.accessToken,
-    });
-
-    final result = await FlutterWebAuth2.authenticate(url: authUrl.toString(), callbackUrlScheme: _callbackScheme);
+    final result = await FlutterWebAuth2.authenticate(
+      url: authUrl,
+      callbackUrlScheme: _callbackScheme,
+    );
     final status = Uri.parse(result).queryParameters['status'];
     ref.invalidate(connectedAccountsProvider);
     return status == 'ok';
   }
 
-  Future<bool> connectOutlook() async {
-    final session = supabase.auth.currentSession;
-    if (session == null) return false;
+  Future<bool> connectGmail() => _connect('gmail');
 
-    final callbackUrl = '$_functionsBase/outlook-oauth-callback';
-    final authUrl = Uri.https('login.microsoftonline.com', '/common/oauth2/v2.0/authorize', {
-      'client_id': Env.microsoftClientId,
-      'redirect_uri': callbackUrl,
-      'response_type': 'code',
-      'response_mode': 'query',
-      'scope': 'offline_access Mail.Read',
-      'state': session.accessToken,
-    });
-
-    final result = await FlutterWebAuth2.authenticate(url: authUrl.toString(), callbackUrlScheme: _callbackScheme);
-    final status = Uri.parse(result).queryParameters['status'];
-    ref.invalidate(connectedAccountsProvider);
-    return status == 'ok';
-  }
+  Future<bool> connectOutlook() => _connect('outlook');
 
   Future<void> disconnect(String accountId) async {
     await supabase.from('taskmail_email_accounts').delete().eq('id', accountId);

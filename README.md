@@ -37,20 +37,22 @@ flutter pub get
 
 flutter run \
   --dart-define=SUPABASE_URL=https://xxxx.supabase.co \
-  --dart-define=SUPABASE_ANON_KEY=eyJ... \
-  --dart-define=GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com \
-  --dart-define=MICROSOFT_CLIENT_ID=xxxx-xxxx-xxxx
+  --dart-define=SUPABASE_ANON_KEY=eyJ...
 ```
+
+A Gmail/Outlook `client_id`-kat nem kell a kliensnek átadni: az engedélykérő
+URL-t az `oauth-start` Edge Function állítja össze szerveroldalon.
 
 A `SUPABASE_URL`/`SUPABASE_ANON_KEY` **ugyanaz**, mint a `serveos`/
 `serveos_admin` `.env`-jében — így közös a bejelentkezés.
 
 ## Supabase beállítás
 
-1. Supabase Dashboard → SQL Editor → futtasd a
-   `supabase/migrations/0001_taskmail_schema.sql` tartalmát (ugyanabban a
-   projektben, mint ahol a `serveos_admin`/`serveos` migrációi már lefutottak
-   — a `venues`/`venue_users` tábláknak léteznie kell előtte).
+1. Supabase Dashboard → SQL Editor → futtasd sorrendben a
+   `supabase/migrations/0001_taskmail_schema.sql`, majd a
+   `0002_oauth_state.sql` tartalmát (ugyanabban a projektben, mint ahol a
+   `serveos_admin`/`serveos` migrációi már lefutottak — a `venues`/
+   `venue_users` tábláknak léteznie kell előtte).
 2. Edge Function secrets beállítása (Dashboard → Edge Functions → Secrets,
    vagy `supabase secrets set`):
    - `ANTHROPIC_API_KEY` — Claude API kulcs
@@ -64,10 +66,17 @@ A `SUPABASE_URL`/`SUPABASE_ANON_KEY` **ugyanaz**, mint a `serveos`/
      automatikusan beállítja minden Edge Function számára
 3. Edge Functions deploy:
    ```bash
+   # Ezt a kliens hívja a saját munkamenetével → JWT-ellenőrzés KELL
+   supabase functions deploy oauth-start
+
+   # Ezeket a Google/Microsoft hívja vissza, illetve a cron → nincs kliens-JWT
    supabase functions deploy gmail-oauth-callback --no-verify-jwt
    supabase functions deploy outlook-oauth-callback --no-verify-jwt
    supabase functions deploy sync-emails --no-verify-jwt
    ```
+   ⚠️ A `sync-emails` csak akkor ellenőriz jogosultságot, ha a
+   `SYNC_CRON_SECRET` be van állítva — ha kimarad, a végpont bárki által
+   hívható. A telepítés után ezt feltétlenül ellenőrizd.
 4. `sync-emails` időzítése `pg_cron` + `pg_net`-tel (SQL Editor):
    ```sql
    select cron.schedule(

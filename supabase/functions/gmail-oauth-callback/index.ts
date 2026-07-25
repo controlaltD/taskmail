@@ -1,11 +1,12 @@
 // Gmail OAuth callback: Google ide irányítja vissza a usert a consent után.
-// A `state` paraméterben a TaskMail Supabase access tokenje utazik (a Flutter
-// app tette bele indításkor) — ebből azonosítjuk, melyik user fiókjához
-// kössük az emailt. A code→token cserét itt végezzük (client_secret kell
-// hozzá, ezért nem lehet a kliensben).
+// A `state` egy egyszer felhasználható nonce, amit az `oauth-start` függvény
+// adott ki — ebből derül ki, melyik user fiókjához kössük az emailt. A
+// code→token cserét itt végezzük (client_secret kell hozzá, ezért nem lehet
+// a kliensben).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encryptToken } from "../_shared/crypto.ts";
 import { exchangeGmailCode, fetchGmailProfile } from "../_shared/gmail.ts";
+import { consumeState } from "../_shared/oauth_state.ts";
 
 const APP_CALLBACK_SCHEME = "hu.serveos.taskmail://oauth-callback";
 
@@ -30,8 +31,9 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
   );
 
-  const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(state);
-  if (userError || !userData.user) return redirect("error", "invalid_session");
+  // A nonce beváltása egyben törli is: visszajátszani nem lehet.
+  const userId = await consumeState(supabaseAdmin, state, "gmail");
+  if (!userId) return redirect("error", "invalid_state");
 
   try {
     const redirectUri = `${url.origin}${url.pathname}`;
@@ -40,7 +42,7 @@ Deno.serve(async (req) => {
 
     await supabaseAdmin.from("taskmail_email_accounts").upsert(
       {
-        user_id: userData.user.id,
+        user_id: userId,
         provider: "gmail",
         email_address: emailAddress,
         access_token_encrypted: await encryptToken(tokens.accessToken),

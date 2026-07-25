@@ -13,8 +13,8 @@ class Env {
   static const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
   static const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
 
-  static const googleClientId = String.fromEnvironment('GOOGLE_CLIENT_ID');
-  static const microsoftClientId = String.fromEnvironment('MICROSOFT_CLIENT_ID');
+  // A Gmail/Outlook client_id-k szándékosan NEM itt élnek: az engedélykérő
+  // URL-t az `oauth-start` Edge Function állítja össze szerveroldalon.
 
   static bool get isConfigured => supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
 }
