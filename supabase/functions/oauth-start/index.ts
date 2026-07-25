@@ -9,6 +9,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createState, Provider } from "../_shared/oauth_state.ts";
+import { codeChallengeS256, generateCodeVerifier } from "../_shared/crypto.ts";
 
 const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 const OUTLOOK_SCOPE = "offline_access Mail.Read";
@@ -20,7 +21,12 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-function buildAuthUrl(provider: Provider, nonce: string, functionsBase: string): string {
+function buildAuthUrl(
+  provider: Provider,
+  nonce: string,
+  challenge: string,
+  functionsBase: string,
+): string {
   if (provider === "gmail") {
     return `https://accounts.google.com/o/oauth2/v2/auth?${new URLSearchParams({
       client_id: Deno.env.get("GOOGLE_CLIENT_ID") ?? "",
@@ -30,6 +36,8 @@ function buildAuthUrl(provider: Provider, nonce: string, functionsBase: string):
       prompt: "consent",
       scope: GMAIL_SCOPE,
       state: nonce,
+      code_challenge: challenge,
+      code_challenge_method: "S256",
     })}`;
   }
   return `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${new URLSearchParams({
@@ -39,6 +47,8 @@ function buildAuthUrl(provider: Provider, nonce: string, functionsBase: string):
     response_mode: "query",
     scope: OUTLOOK_SCOPE,
     state: nonce,
+    code_challenge: challenge,
+    code_challenge_method: "S256",
   })}`;
 }
 
@@ -71,9 +81,11 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const nonce = await createState(supabaseAdmin, userData.user.id, provider);
+    const verifier = generateCodeVerifier();
+    const challenge = await codeChallengeS256(verifier);
+    const nonce = await createState(supabaseAdmin, userData.user.id, provider, verifier);
     const functionsBase = `${new URL(req.url).origin}/functions/v1`;
-    return json({ url: buildAuthUrl(provider, nonce, functionsBase) });
+    return json({ url: buildAuthUrl(provider, nonce, challenge, functionsBase) });
   } catch (err) {
     console.error("[oauth-start]", err);
     return json({ error: "state_creation_failed" }, 500);

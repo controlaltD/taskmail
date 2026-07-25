@@ -137,24 +137,48 @@ class _AccountTile extends ConsumerWidget {
       SyncStatus.error => AppColors.priorityUrgent,
       SyncStatus.pending => Colors.grey,
     };
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(
-        account.provider == EmailProvider.gmail ? Icons.mail_outline_rounded : Icons.alternate_email_rounded,
-        color: AppColors.primary,
-      ),
-      title: Text(account.emailAddress),
-      subtitle: Text(account.provider.label),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.circle, size: 10, color: statusColor),
-          IconButton(
-            icon: const Icon(Icons.close_rounded, size: 18),
-            onPressed: () => ref.read(accountsRepositoryProvider).disconnect(account.id),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: Icon(
+            account.provider == EmailProvider.gmail
+                ? Icons.mail_outline_rounded
+                : Icons.alternate_email_rounded,
+            color: AppColors.primary,
           ),
-        ],
-      ),
+          title: Text(account.emailAddress),
+          subtitle: Text(account.provider.label),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.circle, size: 10, color: statusColor),
+              IconButton(
+                icon: const Icon(Icons.close_rounded, size: 18),
+                onPressed: () => ref.read(accountsRepositoryProvider).disconnect(account.id),
+              ),
+            ],
+          ),
+        ),
+        // A levelek AI-feldolgozása külön, kifejezett hozzájárulás — a
+        // postafiók összekötése önmagában nem jelenti azt, hogy a tartalom
+        // külső szolgáltatóhoz kerülhet.
+        SwitchListTile(
+          contentPadding: const EdgeInsets.only(left: 16, right: 0),
+          dense: true,
+          value: account.aiEnabled,
+          onChanged: (v) => ref.read(accountsRepositoryProvider).setAiEnabled(account.id, v),
+          title: const Text('AI-feldolgozás', style: TextStyle(fontSize: 13)),
+          subtitle: Text(
+            account.aiEnabled
+                ? 'A levelek feladója, tárgya és részlete elemzésre az Anthropic felé megy.'
+                : 'Kikapcsolva — a levelek tartalma nem hagyja el a rendszert.',
+            style: const TextStyle(fontSize: 11, color: Colors.grey),
+          ),
+        ),
+        const SizedBox(height: 8),
+      ],
     );
   }
 }

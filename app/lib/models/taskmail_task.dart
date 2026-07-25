@@ -166,34 +166,9 @@ class TaskMailTask {
         'source_email_id': sourceEmailId,
       };
 
-  /// A ServeOS megosztott `tasks` táblájába küldéshez — csak azok a mezők,
-  /// amik ott is léteznek (lásd `serveos/supabase/migration.sql`).
-  Map<String, dynamic> toServeosInsertJson({required String venueId}) => {
-        'title': title,
-        'description': description,
-        'col': column.dbValue,
-        'priority': priority.dbValue,
-        'label': label.dbValue,
-        'assignees': assignees,
-        'due_date': dueDate?.toIso8601String().split('T').first,
-        'checklist': checklist.map((e) => e.toJson()).toList(),
-        'comments': [
-          {
-            'id': DateTime.now().millisecondsSinceEpoch,
-            'user': 'TaskMail AI',
-            'text': 'Létrehozva a TaskMail appból',
-            'time': _nowStamp(),
-          },
-          ...comments.map((e) => e.toJson()),
-        ],
-        'venue_id': venueId,
-      };
-
-  static String _nowStamp() {
-    final now = DateTime.now();
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${two(now.month)}.${two(now.day)} ${two(now.hour)}:${two(now.minute)}';
-  }
+  // A ServeOS-be küldés sorát már nem a kliens állítja össze: azt a
+  // `taskmail_push_to_serveos` függvény építi szerveroldalon, a mentett
+  // sorból — így a `venue_id` és a forrásjelzés sem hamisítható.
 
   TaskMailTask copyWith({
     String? title,

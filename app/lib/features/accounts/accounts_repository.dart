@@ -49,6 +49,17 @@ class AccountsRepository {
 
   Future<bool> connectOutlook() => _connect('outlook');
 
+  /// Az AI-feldolgozás fiókonkénti engedélyezése. Amíg ki van kapcsolva, a
+  /// levelek tartalma nem hagyja el a rendszert.
+  Future<void> setAiEnabled(String accountId, bool enabled) async {
+    await supabase
+        .from('taskmail_email_accounts')
+        .update({'ai_enabled': enabled}).eq('id', accountId);
+    ref.invalidate(connectedAccountsProvider);
+  }
+
+  /// A fiók lecsatolásakor a hozzá tartozó levelek is törlődnek (a
+  /// `taskmail_email_messages.account_id` idegen kulcs kaszkádol).
   Future<void> disconnect(String accountId) async {
     await supabase.from('taskmail_email_accounts').delete().eq('id', accountId);
     ref.invalidate(connectedAccountsProvider);

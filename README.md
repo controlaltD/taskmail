@@ -49,10 +49,9 @@ A `SUPABASE_URL`/`SUPABASE_ANON_KEY` **ugyanaz**, mint a `serveos`/
 ## Supabase beállítás
 
 1. Supabase Dashboard → SQL Editor → futtasd sorrendben a
-   `supabase/migrations/0001_taskmail_schema.sql`, majd a
-   `0002_oauth_state.sql` tartalmát (ugyanabban a projektben, mint ahol a
-   `serveos_admin`/`serveos` migrációi már lefutottak — a `venues`/
-   `venue_users` tábláknak léteznie kell előtte).
+   `supabase/migrations/` fájljait (`0001` → `0002` → `0003`), ugyanabban a
+   projektben, mint ahol a `serveos_admin`/`serveos` migrációi már lefutottak
+   — a `venues`/`venue_users` tábláknak léteznie kell előtte.
 2. Edge Function secrets beállítása (Dashboard → Edge Functions → Secrets,
    vagy `supabase secrets set`):
    - `ANTHROPIC_API_KEY` — Claude API kulcs
@@ -138,8 +137,26 @@ táblájába — pontosan azokkal a mezőkkel (`title`, `description`, `col`,
 változtatás nélkül, natívan jelenik meg ott. A TaskMail oldali kártyára
 visszaírjuk a kapott ServeOS `task_id`-t, hogy tudjuk, már át van küldve.
 
+A beszúrást a `taskmail_push_to_serveos` adatbázisfüggvény végzi, ami
+szerveroldalon ellenőrzi, hogy a kártya a hívóé, és hogy a hívó tagja-e a
+megcélzott üzletnek — a `venue_id` és a forrásjelzés így nem hamisítható a
+kliensből. Ugyanaz a kártya kétszer nem kerül át.
+
 **Ez egyirányú (TaskMail → ServeOS), kártyánkénti kézi döntés** — nincs
 automatikus tömeges szinkron és nincs visszaszinkron.
+
+## Adatvédelem
+
+- **Az AI-feldolgozás fiókonként külön hozzájáruláshoz kötött**, és
+  alapértelmezésben ki van kapcsolva. Amíg nincs bekapcsolva, a levelek
+  tartalma nem hagyja el a rendszert. Bekapcsolva a feladó, a tárgy és a
+  tartalmi részlet az Anthropic felé megy elemzésre — ezt adatfeldolgozóként
+  fel kell tüntetni az adatkezelési tájékoztatóban.
+- **A tárolt levelek 90 nap után automatikusan törlődnek** (`pg_cron`), kivéve
+  amiből feladat született. A fiók lecsatolása a hozzá tartozó leveleket is
+  törli.
+- Az OAuth tokenek AES-GCM-mel titkosítva, a saját adatbázissorukhoz kötve
+  tárolódnak, így egy másik fiók sorába átmásolt token használhatatlan.
 
 ## Ismert korlátok / következő lépések
 
@@ -148,6 +165,11 @@ automatikus tömeges szinkron és nincs visszaszinkron.
   admin panelen keresztül kell provisionolni.
 - Outlook/Gmail push webhook helyett v1-ben polling (cron) van — valós idejű
   értesítés helyett néhány perces késleltetéssel jelennek meg az új levelek.
+- Az OAuth folyamat PKCE-t használ, de a visszatérés még egyedi URL-sémán
+  (`hu.serveos.taskmail://`) érkezik, amit elvben más alkalmazás is
+  lefoglalhat. Ennek kiváltása App Links (Android) / Universal Links (iOS)
+  megoldásra igazolt domaint és a `.well-known` fájlok kiszolgálását
+  igényli — külön lépés, amint van hozzá domain.
 - Kétirányú ServeOS szinkron (ha ott módosítják a kártyát, az ne tükröződjön
   vissza TaskMail-be) nincs implementálva.
 - A jelenlegi színpaletta/branding helykitöltő — cserélhető a

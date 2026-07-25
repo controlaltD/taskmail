@@ -4,7 +4,26 @@
 // sort a user alapértelmezett board-jának "todo" oszlopában.
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { classifyEmail } from "../_shared/claude.ts";
-import { decryptToken, encryptToken, safeCompare } from "../_shared/crypto.ts";
+import { decryptToken, encryptToken, safeCompare, tokenAad } from "../_shared/crypto.ts";
+
+/** Futásonként és fiókonként legfeljebb ennyi levelet dolgozunk fel. */
+const MAX_MESSAGES_PER_RUN = 50;
+
+/**
+ * A hiba okát rövid, előre definiált kóddá alakítja. A `sync_error` mezőt a
+ * kliens is megjeleníti, a nyers kivételszöveg pedig kiszivárogtathatna
+ * belső részleteket — például a hívott URL-t a benne lévő tokennel.
+ */
+function classifyFailure(reason: unknown): string {
+  const text = String(reason);
+  if (/token/i.test(text) && /(refresh|expire|invalid|revoke)/i.test(text)) {
+    return "auth_expired";      // a felhasználónak újra össze kell kötnie a fiókot
+  }
+  if (/quota|rate.?limit|429/i.test(text)) return "rate_limited";
+  if (/TOKEN_ENCRYPTION_KEY|decrypt|OperationError/i.test(text)) return "decrypt_failed";
+  if (/ANTHROPIC|claude/i.test(text)) return "ai_unavailable";
+  return "sync_failed";
+}
 import { fetchNewGmailMessages, refreshGmailToken } from "../_shared/gmail.ts";
 import { fetchNewOutlookMessages, refreshOutlookToken } from "../_shared/outlook.ts";
 
@@ -16,16 +35,21 @@ interface Account {
   refresh_token_encrypted: string | null;
   token_expires_at: string | null;
   last_synced_at: string | null;
+  ai_enabled: boolean;
 }
 
 async function ensureFreshAccessToken(supabase: SupabaseClient, account: Account): Promise<string | null> {
   if (!account.access_token_encrypted) return null;
+  // Az AAD a sorhoz köti a titkosított értéket: egy másik fiók sorába
+  // átmásolt token visszafejtése itt hibára fut.
+  const aad = tokenAad(account.id, account.user_id);
+
   const expiresAt = account.token_expires_at ? new Date(account.token_expires_at) : null;
   const stillValid = expiresAt && expiresAt.getTime() - Date.now() > 60_000;
-  if (stillValid) return decryptToken(account.access_token_encrypted);
+  if (stillValid) return decryptToken(account.access_token_encrypted, aad);
 
-  if (!account.refresh_token_encrypted) return decryptToken(account.access_token_encrypted);
-  const refreshToken = await decryptToken(account.refresh_token_encrypted);
+  if (!account.refresh_token_encrypted) return decryptToken(account.access_token_encrypted, aad);
+  const refreshToken = await decryptToken(account.refresh_token_encrypted, aad);
 
   const refreshed = account.provider === "gmail"
     ? await refreshGmailToken(refreshToken)
@@ -34,7 +58,7 @@ async function ensureFreshAccessToken(supabase: SupabaseClient, account: Account
   await supabase
     .from("taskmail_email_accounts")
     .update({
-      access_token_encrypted: await encryptToken(refreshed.accessToken),
+      access_token_encrypted: await encryptToken(refreshed.accessToken, aad),
       token_expires_at: refreshed.expiresAt.toISOString(),
     })
     .eq("id", account.id);
@@ -64,23 +88,30 @@ async function processAccount(supabase: SupabaseClient, account: Account) {
   const accessToken = await ensureFreshAccessToken(supabase, account);
   if (!accessToken) return;
 
-  const messages = account.provider === "gmail"
+  const fetched = account.provider === "gmail"
     ? await fetchNewGmailMessages(accessToken, account.last_synced_at)
     : await fetchNewOutlookMessages(accessToken, account.last_synced_at);
+
+  // Felső korlát futásonként: egy hirtelen levéláradat így nem tud
+  // korlátlan Claude API-költséget okozni. A maradék a következő körben jön.
+  const messages = fetched.slice(0, MAX_MESSAGES_PER_RUN);
 
   let boardId: string | null = null;
 
   for (const msg of messages) {
-    let classification;
-    try {
-      classification = await classifyEmail({
-        subject: msg.subject,
-        snippet: msg.snippet,
-        fromAddress: msg.fromAddress,
-      });
-    } catch (err) {
-      console.error("[sync-emails] classify error", err);
-      classification = null;
+    // A levél tartalma csak akkor kerül külső szolgáltatóhoz, ha ehhez a
+    // felhasználó erre a fiókra kifejezetten hozzájárult.
+    let classification = null;
+    if (account.ai_enabled) {
+      try {
+        classification = await classifyEmail({
+          subject: msg.subject,
+          snippet: msg.snippet,
+          fromAddress: msg.fromAddress,
+        });
+      } catch (err) {
+        console.error("[sync-emails] classify error", err);
+      }
     }
 
     const { data: savedMessage, error: upsertError } = await supabase
@@ -156,7 +187,7 @@ Deno.serve(async (req) => {
 
   const { data: accounts, error } = await supabase
     .from("taskmail_email_accounts")
-    .select("id, user_id, provider, access_token_encrypted, refresh_token_encrypted, token_expires_at, last_synced_at");
+    .select("id, user_id, provider, access_token_encrypted, refresh_token_encrypted, token_expires_at, last_synced_at, ai_enabled");
 
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
@@ -170,10 +201,13 @@ Deno.serve(async (req) => {
   for (const [i, result] of results.entries()) {
     if (result.status === "rejected") {
       const account = (accounts as Account[])[i];
+      // A részletes ok csak a szervernaplóba megy: a nyers kivételszöveg
+      // tartalmazhatja a hívott URL-t a benne lévő tokennel együtt, a
+      // sync_error mezőt pedig a kliens is olvassa.
       console.error(`[sync-emails] account ${account.id} failed`, result.reason);
       await supabase
         .from("taskmail_email_accounts")
-        .update({ sync_status: "error", sync_error: String(result.reason) })
+        .update({ sync_status: "error", sync_error: classifyFailure(result.reason) })
         .eq("id", account.id);
     }
   }

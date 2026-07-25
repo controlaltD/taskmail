@@ -9,17 +9,24 @@ export interface OAuthTokens {
   expiresAt: Date;
 }
 
-export async function exchangeGmailCode(code: string, redirectUri: string): Promise<OAuthTokens> {
+export async function exchangeGmailCode(
+  code: string,
+  redirectUri: string,
+  codeVerifier: string | null,
+): Promise<OAuthTokens> {
+  const params: Record<string, string> = {
+    code,
+    client_id: Deno.env.get("GOOGLE_CLIENT_ID") ?? "",
+    client_secret: Deno.env.get("GOOGLE_CLIENT_SECRET") ?? "",
+    redirect_uri: redirectUri,
+    grant_type: "authorization_code",
+  };
+  if (codeVerifier) params.code_verifier = codeVerifier;
+
   const res = await fetch(TOKEN_URL, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      code,
-      client_id: Deno.env.get("GOOGLE_CLIENT_ID") ?? "",
-      client_secret: Deno.env.get("GOOGLE_CLIENT_SECRET") ?? "",
-      redirect_uri: redirectUri,
-      grant_type: "authorization_code",
-    }),
+    body: new URLSearchParams(params),
   });
   if (!res.ok) throw new Error(`Gmail token csere sikertelen: ${await res.text()}`);
   const data = await res.json();

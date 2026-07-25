@@ -103,22 +103,18 @@ class BoardRepository {
     ref.invalidate(boardTasksProvider);
   }
 
-  /// Kártya átküldése a meglévő, éles ServeOS `tasks` táblába — közvetlen
-  /// kliens-oldali írás (lásd terv: a `tasks` tábla RLS-e permisszív).
+  /// Kártya átküldése a ServeOS Kanban táblájára.
+  ///
+  /// A beszúrást a `taskmail_push_to_serveos` függvény végzi, ami
+  /// szerveroldalon ellenőrzi, hogy a kártya tényleg a hívóé, és hogy a hívó
+  /// tagja-e a megcélzott üzletnek. Korábban a kliens közvetlenül írt a
+  /// `tasks` táblába a saját maga által megadott `venue_id`-val — azt semmi
+  /// nem ellenőrizte, így egy módosított kliens bármelyik üzletbe írhatott.
   Future<void> syncToServeos(TaskMailTask task, ServeosVenue venue) async {
-    final inserted = await supabase
-        .from('tasks')
-        .insert(task.toServeosInsertJson(venueId: venue.venueId))
-        .select('id')
-        .single();
-    final serveosTaskId = inserted['id'] as int;
-
-    await supabase.from('taskmail_tasks').update({
-      'serveos_task_id': serveosTaskId,
-      'serveos_venue_id': venue.venueId,
-      'synced_at': DateTime.now().toIso8601String(),
-    }).eq('id', task.id);
-
+    await supabase.rpc('taskmail_push_to_serveos', params: {
+      'p_task_id': task.id,
+      'p_venue_id': venue.venueId,
+    });
     ref.invalidate(boardTasksProvider);
   }
 }

@@ -36,7 +36,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             password: _passwordCtrl.text,
           );
     } catch (e) {
-      setState(() => _error = 'Sikertelen bejelentkezés: $e');
+      // Egységes üzenet: a Supabase eredeti hibája eltérő szöveggel jelzi a
+      // nem létező fiókot és a rossz jelszót, amiből kideríthető, kinek van
+      // egyáltalán fiókja a rendszerben.
+      debugPrint('Bejelentkezési hiba: $e');
+      setState(() => _error = 'Hibás email cím vagy jelszó.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }

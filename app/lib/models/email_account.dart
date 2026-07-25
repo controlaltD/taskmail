@@ -31,6 +31,10 @@ class EmailAccount {
   final SyncStatus syncStatus;
   final String? syncError;
   final DateTime? lastSyncedAt;
+
+  /// A felhasználó kifejezetten hozzájárult, hogy a levelek tartalma
+  /// AI-feldolgozásra külső szolgáltatóhoz (Anthropic) kerüljön.
+  final bool aiEnabled;
   final DateTime createdAt;
 
   const EmailAccount({
@@ -41,6 +45,7 @@ class EmailAccount {
     this.syncStatus = SyncStatus.pending,
     this.syncError,
     this.lastSyncedAt,
+    this.aiEnabled = false,
     required this.createdAt,
   });
 
@@ -53,6 +58,7 @@ class EmailAccount {
         syncError: json['sync_error'] as String?,
         lastSyncedAt:
             json['last_synced_at'] != null ? DateTime.tryParse(json['last_synced_at'] as String) : null,
+        aiEnabled: json['ai_enabled'] as bool? ?? false,
         createdAt: DateTime.parse(json['created_at'] as String),
       );
 }

@@ -9,18 +9,25 @@ export interface OAuthTokens {
   expiresAt: Date;
 }
 
-export async function exchangeOutlookCode(code: string, redirectUri: string): Promise<OAuthTokens> {
+export async function exchangeOutlookCode(
+  code: string,
+  redirectUri: string,
+  codeVerifier: string | null,
+): Promise<OAuthTokens> {
+  const params: Record<string, string> = {
+    code,
+    client_id: Deno.env.get("MICROSOFT_CLIENT_ID") ?? "",
+    client_secret: Deno.env.get("MICROSOFT_CLIENT_SECRET") ?? "",
+    redirect_uri: redirectUri,
+    grant_type: "authorization_code",
+    scope: "offline_access Mail.Read",
+  };
+  if (codeVerifier) params.code_verifier = codeVerifier;
+
   const res = await fetch(TOKEN_URL, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      code,
-      client_id: Deno.env.get("MICROSOFT_CLIENT_ID") ?? "",
-      client_secret: Deno.env.get("MICROSOFT_CLIENT_SECRET") ?? "",
-      redirect_uri: redirectUri,
-      grant_type: "authorization_code",
-      scope: "offline_access Mail.Read",
-    }),
+    body: new URLSearchParams(params),
   });
   if (!res.ok) throw new Error(`Outlook token csere sikertelen: ${await res.text()}`);
   const data = await res.json();

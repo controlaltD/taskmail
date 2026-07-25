@@ -4,7 +4,7 @@
 // code→token cserét itt végezzük (client_secret kell hozzá, ezért nem lehet
 // a kliensben).
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { encryptToken } from "../_shared/crypto.ts";
+import { encryptToken, tokenAad } from "../_shared/crypto.ts";
 import { exchangeGmailCode, fetchGmailProfile } from "../_shared/gmail.ts";
 import { consumeState } from "../_shared/oauth_state.ts";
 
@@ -20,11 +20,11 @@ function redirect(status: "ok" | "error", message?: string): Response {
 Deno.serve(async (req) => {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
-  const state = url.searchParams.get("state");
+  const stateParam = url.searchParams.get("state");
   const oauthError = url.searchParams.get("error");
 
   if (oauthError) return redirect("error", oauthError);
-  if (!code || !state) return redirect("error", "missing_code_or_state");
+  if (!code || !stateParam) return redirect("error", "missing_code_or_state");
 
   const supabaseAdmin = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
@@ -32,27 +32,43 @@ Deno.serve(async (req) => {
   );
 
   // A nonce beváltása egyben törli is: visszajátszani nem lehet.
-  const userId = await consumeState(supabaseAdmin, state, "gmail");
-  if (!userId) return redirect("error", "invalid_state");
+  const state = await consumeState(supabaseAdmin, stateParam, "gmail");
+  if (!state) return redirect("error", "invalid_state");
 
   try {
     const redirectUri = `${url.origin}${url.pathname}`;
-    const tokens = await exchangeGmailCode(code, redirectUri);
+    const tokens = await exchangeGmailCode(code, redirectUri, state.codeVerifier);
     const emailAddress = await fetchGmailProfile(tokens.accessToken);
 
-    await supabaseAdmin.from("taskmail_email_accounts").upsert(
-      {
-        user_id: userId,
-        provider: "gmail",
-        email_address: emailAddress,
-        access_token_encrypted: await encryptToken(tokens.accessToken),
-        refresh_token_encrypted: tokens.refreshToken ? await encryptToken(tokens.refreshToken) : null,
+    // A titkosítás a fiók sorához van kötve (AAD), ezért előbb meg kell
+    // lennie a sornak — a tokeneket második lépésben írjuk rá.
+    const { data: account, error: upsertError } = await supabaseAdmin
+      .from("taskmail_email_accounts")
+      .upsert(
+        {
+          user_id: state.userId,
+          provider: "gmail",
+          email_address: emailAddress,
+          sync_status: "ok",
+          sync_error: null,
+        },
+        { onConflict: "user_id,provider,email_address" },
+      )
+      .select("id")
+      .single();
+    if (upsertError || !account) throw upsertError ?? new Error("account upsert failed");
+
+    const aad = tokenAad(account.id as string, state.userId);
+    await supabaseAdmin
+      .from("taskmail_email_accounts")
+      .update({
+        access_token_encrypted: await encryptToken(tokens.accessToken, aad),
+        refresh_token_encrypted: tokens.refreshToken
+          ? await encryptToken(tokens.refreshToken, aad)
+          : null,
         token_expires_at: tokens.expiresAt.toISOString(),
-        sync_status: "ok",
-        sync_error: null,
-      },
-      { onConflict: "user_id,provider,email_address" },
-    );
+      })
+      .eq("id", account.id);
 
     return redirect("ok");
   } catch (err) {

@@ -194,7 +194,23 @@ class _TaskEditorContentState extends ConsumerState<_TaskEditorContent> {
   Future<void> _syncToServeos() async {
     final venue = await showVenuePickerDialog(context, ref);
     if (venue == null) return;
-    await ref.read(boardRepositoryProvider).syncToServeos(_buildTask(), venue);
+
+    final repo = ref.read(boardRepositoryProvider);
+    try {
+      // A szerver a mentett sorból építi az átküldött kártyát, ezért a
+      // képernyőn lévő módosításokat előbb rögzítjük.
+      final task = _buildTask();
+      await repo.saveTask(task);
+      await repo.syncToServeos(task, venue);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Nem sikerült átküldeni a kártyát. Próbáld újra.')),
+        );
+      }
+      return;
+    }
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Átküldve a(z) "${venue.name}" ServeOS Kanban táblájára ✓')),
