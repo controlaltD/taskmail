@@ -23,6 +23,27 @@ export async function encryptToken(plain: string): Promise<string> {
   return btoa(String.fromCharCode(...combined));
 }
 
+/**
+ * Két titok összehasonlítása úgy, hogy a futásidő ne áruljon el semmit
+ * arról, hány karakter egyezett. A sima `===` az első eltérésnél kilép,
+ * ezért a mérhető idejéből a titok karakterenként kitalálható.
+ *
+ * A hosszkülönbség is szivárogtat, ezért nem a nyers értékeket vetjük
+ * össze, hanem az azonos hosszú SHA-256 lenyomataikat.
+ */
+export async function safeCompare(a: string, b: string): Promise<boolean> {
+  const enc = new TextEncoder();
+  const [ha, hb] = await Promise.all([
+    crypto.subtle.digest("SHA-256", enc.encode(a)),
+    crypto.subtle.digest("SHA-256", enc.encode(b)),
+  ]);
+  const va = new Uint8Array(ha);
+  const vb = new Uint8Array(hb);
+  let diff = 0;
+  for (let i = 0; i < va.length; i++) diff |= va[i] ^ vb[i];
+  return diff === 0;
+}
+
 export async function decryptToken(encoded: string): Promise<string> {
   const key = await importKey();
   const combined = Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));

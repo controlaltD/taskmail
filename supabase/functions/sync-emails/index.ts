@@ -4,7 +4,7 @@
 // sort a user alapértelmezett board-jának "todo" oszlopában.
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { classifyEmail } from "../_shared/claude.ts";
-import { decryptToken, encryptToken } from "../_shared/crypto.ts";
+import { decryptToken, encryptToken, safeCompare } from "../_shared/crypto.ts";
 import { fetchNewGmailMessages, refreshGmailToken } from "../_shared/gmail.ts";
 import { fetchNewOutlookMessages, refreshOutlookToken } from "../_shared/outlook.ts";
 
@@ -133,9 +133,19 @@ async function processAccount(supabase: SupabaseClient, account: Account) {
 }
 
 Deno.serve(async (req) => {
-  const authHeader = req.headers.get("authorization") ?? "";
+  // A hitelesítés hiányzó konfiguráció esetén sem maradhat el: korábban
+  // `if (cronSecret && ...)` állt itt, vagyis ha a titok kimaradt a
+  // telepítéskor, a feltétel csendben hamis lett, és a végpont bárki
+  // számára nyitva állt — a függvény ráadásul --no-verify-jwt kapcsolóval
+  // fut, tehát semmi más nem védte.
   const cronSecret = Deno.env.get("SYNC_CRON_SECRET");
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret) {
+    console.error("[sync-emails] SYNC_CRON_SECRET nincs beállítva — a végpont letiltva");
+    return new Response("Server misconfigured", { status: 500 });
+  }
+
+  const authHeader = req.headers.get("authorization") ?? "";
+  if (!(await safeCompare(authHeader, `Bearer ${cronSecret}`))) {
     return new Response("Unauthorized", { status: 401 });
   }
 

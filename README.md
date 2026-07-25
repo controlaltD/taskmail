@@ -74,9 +74,11 @@ A `SUPABASE_URL`/`SUPABASE_ANON_KEY` **ugyanaz**, mint a `serveos`/
    supabase functions deploy outlook-oauth-callback --no-verify-jwt
    supabase functions deploy sync-emails --no-verify-jwt
    ```
-   ⚠️ A `sync-emails` csak akkor ellenőriz jogosultságot, ha a
-   `SYNC_CRON_SECRET` be van állítva — ha kimarad, a végpont bárki által
-   hívható. A telepítés után ezt feltétlenül ellenőrizd.
+   A `sync-emails` a `SYNC_CRON_SECRET` titokkal védi magát. Ha a titok
+   nincs beállítva, a függvény minden hívást `500`-zal utasít vissza a
+   feldolgozás megkezdése előtt — így egy elfelejtett secret nem nyitja ki
+   csendben a végpontot. A telepítés után egy titok nélküli hívásnak
+   `401`-et kell adnia.
 4. `sync-emails` időzítése `pg_cron` + `pg_net`-tel (SQL Editor):
    ```sql
    select cron.schedule(
