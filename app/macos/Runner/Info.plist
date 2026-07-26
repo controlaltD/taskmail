@@ -28,5 +28,16 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>hu.serveos.taskmail.oauth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>hu.serveos.taskmail</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

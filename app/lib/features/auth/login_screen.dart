@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_theme.dart';
@@ -12,51 +13,31 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  final _emailCtrl = TextEditingController();
-  final _passwordCtrl = TextEditingController();
+  final _pinCtrl = TextEditingController();
   bool _loading = false;
-  bool _magicLinkSent = false;
   String? _error;
 
   @override
   void dispose() {
-    _emailCtrl.dispose();
-    _passwordCtrl.dispose();
+    _pinCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _submitPassword() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-    try {
-      await ref.read(authControllerProvider).signInWithPassword(
-            email: _emailCtrl.text.trim(),
-            password: _passwordCtrl.text,
-          );
-    } catch (e) {
-      // Egységes üzenet: a Supabase eredeti hibája eltérő szöveggel jelzi a
-      // nem létező fiókot és a rossz jelszót, amiből kideríthető, kinek van
-      // egyáltalán fiókja a rendszerben.
-      debugPrint('Bejelentkezési hiba: $e');
-      setState(() => _error = 'Hibás email cím vagy jelszó.');
-    } finally {
-      if (mounted) setState(() => _loading = false);
+  Future<void> _submit() async {
+    final pin = _pinCtrl.text.trim();
+    if (pin.length != 4) {
+      setState(() => _error = 'A PIN pontosan 4 számjegy.');
+      return;
     }
-  }
-
-  Future<void> _submitMagicLink() async {
-    if (_emailCtrl.text.trim().isEmpty) return;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      await ref.read(authControllerProvider).signInWithMagicLink(_emailCtrl.text.trim());
-      setState(() => _magicLinkSent = true);
+      await ref.read(authControllerProvider).signInWithPin(pin);
     } catch (e) {
-      setState(() => _error = 'Nem sikerült elküldeni a linket: $e');
+      setState(() => _error = e is PinLoginException ? e.message : 'A bejelentkezés sikertelen.');
+      _pinCtrl.clear();
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -70,7 +51,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 400),
+              constraints: const BoxConstraints(maxWidth: 360),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -91,53 +72,41 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   Text('TaskMail', style: Theme.of(context).textTheme.headlineLarge),
                   const SizedBox(height: 6),
                   Text(
-                    'Jelentkezz be a ServeOS fiókoddal',
+                    'Jelentkezz be a ServeOS PIN-kódoddal',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey),
                   ),
                   const SizedBox(height: 32),
-                  if (_magicLinkSent)
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppColors.priorityLow.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Text('Elküldtük a bejelentkezési linket az email címedre. 📬'),
-                    )
-                  else ...[
-                    TextField(
-                      controller: _emailCtrl,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(labelText: 'Email cím'),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _passwordCtrl,
-                      obscureText: true,
-                      decoration: const InputDecoration(labelText: 'Jelszó'),
-                      onSubmitted: (_) => _submitPassword(),
-                    ),
-                    if (_error != null) ...[
-                      const SizedBox(height: 12),
-                      Text(_error!, style: const TextStyle(color: AppColors.priorityUrgent)),
-                    ],
-                    const SizedBox(height: 20),
-                    ElevatedButton(
-                      onPressed: _loading ? null : _submitPassword,
-                      child: _loading
-                          ? const SizedBox(
-                              height: 18,
-                              width: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                            )
-                          : const Text('Bejelentkezés'),
-                    ),
-                    const SizedBox(height: 12),
-                    TextButton(
-                      onPressed: _loading ? null : _submitMagicLink,
-                      child: const Text('Vagy küldj nekem egy belépő linket'),
+                  TextField(
+                    controller: _pinCtrl,
+                    autofocus: true,
+                    obscureText: true,
+                    textAlign: TextAlign.center,
+                    keyboardType: TextInputType.number,
+                    maxLength: 4,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(letterSpacing: 12),
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: const InputDecoration(counterText: '', labelText: 'PIN kód'),
+                    onSubmitted: (_) => _submit(),
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      _error!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: AppColors.priorityUrgent),
                     ),
                   ],
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: _loading ? null : _submit,
+                    child: _loading
+                        ? const SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Text('Bejelentkezés'),
+                  ),
                 ],
               ),
             ),
