@@ -24,10 +24,22 @@ kártyastílussal, mint amit a ServeOS csapat már használ.
 A TaskMail a ServeOS fiókkal jelentkeztet be (`auth.users`), és a
 `venue_users` táblát (lásd `serveos_admin` migrációja) használja a
 venue-választáshoz, amikor egy kártyát átküldesz a ServeOS Kanban táblájára.
-A ServeOS `tasks` táblájának RLS-e jelenleg permisszív, így a TaskMail
-kliens közvetlenül tud írni bele — **nincs szükség külön backend hídra** a
-szinkronhoz. A TaskMail saját táblái `taskmail_` prefixet kapnak, hogy ne
-ütközzenek a ServeOS saját tábláival (`tasks`, `users`, `employees`, `venues`).
+A ServeOS `tasks` táblájának RLS-e venue-tagság alapú (`venue_member`
+policy), a szinkron ezért nem közvetlen kliensírással, hanem a
+`taskmail_push_to_serveos` szerveroldali SECURITY DEFINER függvényen
+keresztül történik (lásd lejjebb). A TaskMail saját táblái `taskmail_`
+prefixet kapnak, hogy ne ütközzenek a ServeOS saját tábláival (`tasks`,
+`users`, `employees`, `venues`).
+
+**Bejelentkezés:** a ServeOS-felhasználóknak nincs valódi email
+címük/jelszavuk — csak 4 jegyű PIN-jük. A TaskMail login képernyője ezért
+ugyanazt a `pin-login` Edge Function-t hívja (a `serveos` repóban telepítve,
+ugyanabban a Supabase projektben), amit maga a ServeOS app is használ: a PIN
+ellenőrzése után egy egyszer-használatos "magic link" tokent kapunk vissza,
+amit `supabase.auth.verifyOTP({tokenHash, type: OtpType.magiclink})`-tal
+váltunk valódi munkamenetre. A `pin-login` a bejelentkezéskor a felhasználó
+`venue_users` sorát is létrehozza/frissíti — külön provisioning lépés
+emiatt **nem** kell a TaskMail oldalán.
 
 ## Gyors indítás
 
@@ -49,9 +61,12 @@ A `SUPABASE_URL`/`SUPABASE_ANON_KEY` **ugyanaz**, mint a `serveos`/
 ## Supabase beállítás
 
 1. Supabase Dashboard → SQL Editor → futtasd sorrendben a
-   `supabase/migrations/` fájljait (`0001` → `0002` → `0003`), ugyanabban a
-   projektben, mint ahol a `serveos_admin`/`serveos` migrációi már lefutottak
-   — a `venues`/`venue_users` tábláknak léteznie kell előtte.
+   `supabase/migrations/` fájljait (`0001` → `0002` → `0003` → `0004`),
+   ugyanabban a projektben, mint ahol a `serveos_admin`/`serveos` migrációi
+   már lefutottak — a `venues`/`venue_users` tábláknak léteznie kell előtte,
+   és a `serveos` repo `pin-login` Edge Function-jének is telepítve kell
+   lennie (lásd ott a saját README/rollout lépéseit), mert a bejelentkezés
+   arra épül.
 2. Edge Function secrets beállítása (Dashboard → Edge Functions → Secrets,
    vagy `supabase secrets set`):
    - `ANTHROPIC_API_KEY` — Claude API kulcs
@@ -78,19 +93,13 @@ A `SUPABASE_URL`/`SUPABASE_ANON_KEY` **ugyanaz**, mint a `serveos`/
    feldolgozás megkezdése előtt — így egy elfelejtett secret nem nyitja ki
    csendben a végpontot. A telepítés után egy titok nélküli hívásnak
    `401`-et kell adnia.
-4. `sync-emails` időzítése `pg_cron` + `pg_net`-tel (SQL Editor):
-   ```sql
-   select cron.schedule(
-     'taskmail-sync-emails',
-     '*/5 * * * *',
-     $$
-     select net.http_post(
-       url := 'https://<project-ref>.supabase.co/functions/v1/sync-emails',
-       headers := jsonb_build_object('Authorization', 'Bearer <SYNC_CRON_SECRET>')
-     );
-     $$
-   );
-   ```
+4. `sync-emails` időzítése `pg_cron` + `pg_net`-tel: ezt a
+   `supabase/migrations/0004_sync_cron.sql` végzi. A titkot **nem** írjuk
+   nyílt szövegben SQL-be (az a git-repóba kerülne) — a fájl a Supabase
+   Vault-ba menti a `SYNC_CRON_SECRET` értékét, és a cron job onnan olvassa
+   ki minden futáskor. Nyisd meg a fájlt, cseréld ki a két `<<...>>`
+   helyet (a cron secret valódi értéke, illetve a saját projekt URL-je),
+   és úgy futtasd.
 
 ## Google Cloud / Microsoft Entra OAuth app
 
@@ -160,9 +169,6 @@ automatikus tömeges szinkron és nincs visszaszinkron.
 
 ## Ismert korlátok / következő lépések
 
-- A `venue_users` táblába jelenleg csak `service_role` tud sort írni — egy
-  TaskMail user önmagát nem tudja venue-hoz kötni, ezt egyelőre a ServeOS
-  admin panelen keresztül kell provisionolni.
 - Outlook/Gmail push webhook helyett v1-ben polling (cron) van — valós idejű
   értesítés helyett néhány perces késleltetéssel jelennek meg az új levelek.
 - Az OAuth folyamat PKCE-t használ, de a visszatérés még egyedi URL-sémán
