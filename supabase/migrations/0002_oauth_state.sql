@@ -10,6 +10,10 @@
 --  ki, és a hozzá tartozó felhasználót a szerver tartja nyilván.
 -- ═══════════════════════════════════════════════════════════════════
 
+-- A cron.schedule ebben és a későbbi migrációkban (0003, 0004) is
+-- felhasznált extension — friss projekten még nincs bekapcsolva.
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
 CREATE TABLE IF NOT EXISTS taskmail_oauth_state (
   nonce       TEXT PRIMARY KEY,
   user_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
