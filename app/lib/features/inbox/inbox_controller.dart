@@ -4,6 +4,7 @@ import '../../core/supabase/supabase_client.dart';
 import '../../models/email_message.dart';
 import '../../models/mail_folder.dart';
 import '../auth/auth_controller.dart';
+import 'mail_layout_controller.dart';
 
 /// Egy mappa (illetve AI-kategória szűrő) levelei.
 ///
@@ -36,6 +37,21 @@ final inboxMessagesProvider = FutureProvider.autoDispose<List<EmailMessage>>(
 
 /// Melyik levél van éppen kinyitva a listában. `null`, ha egyik sem.
 final expandedMessageIdProvider = StateProvider.autoDispose<String?>((ref) => null);
+
+/// A kinyitott levél maga — az AI panel ebből dolgozik, hogy ne kelljen
+/// külön lekérdeznie ugyanazt a sort, amit a lista már betöltött.
+final expandedMessageProvider = Provider.autoDispose<EmailMessage?>((ref) {
+  final id = ref.watch(expandedMessageIdProvider);
+  if (id == null) return null;
+
+  final messages = ref.watch(mailboxMessagesProvider(ref.watch(selectedFolderProvider))).valueOrNull;
+  if (messages == null) return null;
+
+  for (final message in messages) {
+    if (message.id == id) return message;
+  }
+  return null;
+});
 
 /// Egy levél teljes tartalma, igény szerint letöltve.
 ///

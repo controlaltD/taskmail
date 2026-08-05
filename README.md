@@ -84,6 +84,8 @@ A `SUPABASE_URL`/`SUPABASE_ANON_KEY` **ugyanaz**, mint a `serveos`/
    # Ezeket a kliens hívja a saját munkamenetével → JWT-ellenőrzés KELL
    supabase functions deploy oauth-start
    supabase functions deploy fetch-email-body
+   supabase functions deploy ai-email-chat
+   supabase functions deploy ai-quick-reply
 
    # Ezeket a Google/Microsoft hívja vissza, illetve a cron → nincs kliens-JWT
    supabase functions deploy gmail-oauth-callback --no-verify-jwt
@@ -176,6 +178,13 @@ automatikus tömeges szinkron és nincs visszaszinkron.
   tartalma nem hagyja el a rendszert. Bekapcsolva a feladó, a tárgy és a
   tartalmi részlet az Anthropic felé megy elemzésre — ezt adatfeldolgozóként
   fel kell tüntetni az adatkezelési tájékoztatóban.
+  Ugyanez a kapcsoló szabályozza az AI panel funkcióit is (válaszjavaslat,
+  chat a levélről): ezek a teljes levéltörzset küldik el, ezért kikapcsolt
+  állapotban a szerver `403`-mal utasítja el őket — a kliensoldali elrejtés
+  önmagában nem lenne elég védelem.
+- **Az AI-beszélgetés nem tárolódik.** A chat a munkamenet idejére él a
+  kliensben; az előzményt minden kérdésnél a kliens küldi fel, adatbázisba
+  nem kerül, tehát nincs mit később törölni sem.
 - **A tárolt levelek 90 nap után automatikusan törlődnek** (`pg_cron`), kivéve
   amiből feladat született. A fiók lecsatolása a hozzá tartozó leveleket is
   törli.
