@@ -62,7 +62,7 @@ A `SUPABASE_URL`/`SUPABASE_ANON_KEY` **ugyanaz**, mint a `serveos`/
 
 1. Supabase Dashboard → SQL Editor → futtasd sorrendben a
    `supabase/migrations/` fájljait (`0001` → `0002` → `0003` → `0004` →
-   `0005` → `0006` → `0007`),
+   `0005` → `0006` → `0007` → `0008`),
    ugyanabban a projektben, mint ahol a `serveos_admin`/`serveos` migrációi
    már lefutottak — a `venues`/`venue_users` tábláknak léteznie kell előtte,
    és a `serveos` repo `pin-login` Edge Function-jének is telepítve kell

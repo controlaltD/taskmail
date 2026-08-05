@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../models/mail_folder.dart';
 import '../../compose/compose_controller.dart';
+import '../../compose/drafts_repository.dart';
 import '../inbox_controller.dart';
 import 'mail_row.dart';
 
@@ -16,6 +18,7 @@ class MailList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (folder == MailFolder.sent) return const _SentList();
+    if (folder == MailFolder.drafts) return const _DraftsList();
 
     final messagesAsync = ref.watch(mailboxMessagesProvider(folder));
 
@@ -33,6 +36,60 @@ class MailList extends ConsumerWidget {
             padding: const EdgeInsets.only(bottom: 24),
             itemCount: messages.length,
             itemBuilder: (context, i) => MailRow(message: messages[i]),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// A megkezdett levelek. Egy koppintás visszanyitja a szerkesztőt ott, ahol
+/// abbamaradt.
+class _DraftsList extends ConsumerWidget {
+  const _DraftsList();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final draftsAsync = ref.watch(draftsProvider);
+
+    return RefreshIndicator(
+      onRefresh: () async => ref.invalidate(draftsProvider),
+      child: draftsAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, _) => _ErrorState(message: '$err'),
+        data: (drafts) {
+          if (drafts.isEmpty) return const _EmptyState(folder: MailFolder.drafts);
+          return ListView.separated(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.only(bottom: 24),
+            itemCount: drafts.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (context, i) {
+              final draft = drafts[i];
+              final recipients = draft.toAddresses.isEmpty
+                  ? 'Nincs címzett'
+                  : 'Címzett: ${draft.toAddresses.join(', ')}';
+              return ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                onTap: () => context.push('/compose', extra: ComposeDraft.fromSaved(draft)),
+                title: Text(
+                  draft.displayTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  recipients,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11.5),
+                ),
+                trailing: Text(
+                  DateFormat('MM.dd HH:mm').format(draft.updatedAt),
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                ),
+              );
+            },
           );
         },
       ),

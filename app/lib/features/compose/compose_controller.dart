@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/supabase/supabase_client.dart';
 import '../../models/email_account.dart';
+import '../../models/email_draft.dart';
 import '../../models/email_message.dart';
 import '../../models/sent_message.dart';
 import '../auth/auth_controller.dart';
@@ -15,6 +16,7 @@ class ComposeDraft {
     this.bodyText = '',
     this.inReplyToMessageId,
     this.accountId,
+    this.draftId,
   });
 
   final List<String> to;
@@ -22,6 +24,20 @@ class ComposeDraft {
   final String bodyText;
   final String? inReplyToMessageId;
   final String? accountId;
+
+  /// Meglévő piszkozat folytatásakor annak azonosítója — így a mentés
+  /// ugyanazt a sort írja tovább, nem hoz létre újat mellé.
+  final String? draftId;
+
+  /// Korábban félbehagyott levél folytatása.
+  factory ComposeDraft.fromSaved(EmailDraft draft) => ComposeDraft(
+        to: draft.toAddresses,
+        subject: draft.subject,
+        bodyText: draft.bodyText,
+        inReplyToMessageId: draft.inReplyToMessageId,
+        accountId: draft.accountId,
+        draftId: draft.id,
+      );
 
   /// Válasz összeállítása egy beérkezett levélre.
   factory ComposeDraft.replyTo(EmailMessage message, {String bodyText = ''}) {
@@ -98,7 +114,9 @@ class ComposeRepository {
 
   final Ref ref;
 
-  Future<void> send({
+  /// Elküldi a levelet, és visszaadja az elküldött levél azonosítóját (ezzel
+  /// jelöljük meg a hozzá tartozó piszkozatot).
+  Future<String?> send({
     required String accountId,
     required List<String> to,
     List<String> cc = const [],
@@ -118,11 +136,13 @@ class ComposeRepository {
     });
 
     final data = response.data as Map?;
-    if (data?['sentMessageId'] == null) {
+    final sentMessageId = data?['sentMessageId'] as String?;
+    if (sentMessageId == null) {
       throw SendException(sendErrorMessage(data?['error'] as String?));
     }
 
     ref.invalidate(sentMessagesProvider);
+    return sentMessageId;
   }
 }
 

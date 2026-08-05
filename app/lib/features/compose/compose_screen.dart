@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'compose_controller.dart';
+import 'drafts_repository.dart';
 
 class ComposeScreen extends ConsumerStatefulWidget {
   const ComposeScreen({super.key, this.draft = const ComposeDraft()});
@@ -21,6 +24,15 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
   bool _sending = false;
   String? _error;
 
+  /// Ennyivel az utolsó leütés után mentünk. Elég rövid ahhoz, hogy egy
+  /// váratlan kilépésnél alig vesszen el valami, és elég hosszú ahhoz, hogy
+  /// gépelés közben ne írjunk az adatbázisba minden betűnél.
+  static const _autosaveDelay = Duration(milliseconds: 1500);
+
+  Timer? _autosaveTimer;
+  String? _draftId;
+  bool _savedAsDraft = false;
+
   @override
   void initState() {
     super.initState();
@@ -28,14 +40,59 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
     _subjectCtrl = TextEditingController(text: widget.draft.subject);
     _bodyCtrl = TextEditingController(text: widget.draft.bodyText);
     _accountId = widget.draft.accountId;
+    _draftId = widget.draft.draftId;
+
+    for (final controller in [_toCtrl, _subjectCtrl, _bodyCtrl]) {
+      controller.addListener(_scheduleAutosave);
+    }
   }
 
   @override
   void dispose() {
+    _autosaveTimer?.cancel();
     _toCtrl.dispose();
     _subjectCtrl.dispose();
     _bodyCtrl.dispose();
     super.dispose();
+  }
+
+  void _scheduleAutosave() {
+    _autosaveTimer?.cancel();
+    _autosaveTimer = Timer(_autosaveDelay, _saveDraft);
+  }
+
+  bool get _isEmpty =>
+      _recipients.isEmpty &&
+      _subjectCtrl.text.trim().isEmpty &&
+      _bodyCtrl.text.trim().isEmpty;
+
+  /// A piszkozat mentése. Üres levélből nem hozunk létre sort — csak akkor,
+  /// ha van benne valami menteni való.
+  Future<void> _saveDraft() async {
+    if (_sending || _savedAsDraft) return;
+    if (_isEmpty && _draftId == null) return;
+
+    try {
+      final id = await ref.read(draftsRepositoryProvider).save(
+            draftId: _draftId,
+            accountId: _accountId,
+            inReplyToMessageId: widget.draft.inReplyToMessageId,
+            to: _recipients,
+            subject: _subjectCtrl.text.trim(),
+            bodyText: _bodyCtrl.text,
+          );
+      if (mounted) _draftId = id;
+    } catch (_) {
+      // A mentés csendben elbukhat (pl. hálózat) — ettől a gépelést nem
+      // szakítjuk meg, a következő ütemezett mentés újrapróbálja.
+    }
+  }
+
+  /// Kilépéskor a még ki nem futott automentést azonnal végrehajtjuk, hogy az
+  /// utolsó néhány leütött karakter se vesszen el.
+  Future<void> _flushBeforeLeaving() async {
+    _autosaveTimer?.cancel();
+    await _saveDraft();
   }
 
   List<String> get _recipients => _toCtrl.text
@@ -59,19 +116,30 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
       return;
     }
 
+    // A küldés indulásakor leállítjuk az automentést: a sikeresen elküldött
+    // levélből nem szabad, hogy visszamaradjon egy "megkezdett" piszkozat.
+    _autosaveTimer?.cancel();
+
     setState(() {
       _sending = true;
       _error = null;
     });
 
     try {
-      await ref.read(composeRepositoryProvider).send(
+      final sentMessageId = await ref.read(composeRepositoryProvider).send(
             accountId: accountId,
             to: _recipients,
             subject: _subjectCtrl.text.trim(),
             bodyText: _bodyCtrl.text,
             inReplyToMessageId: widget.draft.inReplyToMessageId,
           );
+
+      _savedAsDraft = true; // innentől nincs több piszkozat-mentés
+      final draftId = _draftId;
+      if (draftId != null) {
+        await ref.read(draftsRepositoryProvider).markSent(draftId, sentMessageId);
+      }
+
       if (mounted) {
         Navigator.of(context).pop(true);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -85,14 +153,37 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
     }
   }
 
+  Future<void> _discardDraft() async {
+    final draftId = _draftId;
+    _autosaveTimer?.cancel();
+    _savedAsDraft = true; // ne mentse vissza a kilépés előtti flush
+
+    if (draftId != null) {
+      await ref.read(draftsRepositoryProvider).delete(draftId);
+    }
+    if (mounted) Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final accountsAsync = ref.watch(sendableAccountsProvider);
 
-    return Scaffold(
+    return PopScope(
+      // Kilépéskor kimentjük a még ki nem futott változtatásokat — a levél
+      // ne vesszen el csak azért, mert visszaléptek a szerkesztőből.
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) unawaited(_flushBeforeLeaving());
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: Text(widget.draft.inReplyToMessageId != null ? 'Válasz' : 'Új levél'),
         actions: [
+          if (_draftId != null)
+            IconButton(
+              tooltip: 'Piszkozat elvetése',
+              icon: const Icon(Icons.delete_outline_rounded),
+              onPressed: _sending ? null : _discardDraft,
+            ),
           if (_sending)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 20),
@@ -179,6 +270,7 @@ class _ComposeScreenState extends ConsumerState<ComposeScreen> {
             ],
           );
         },
+      ),
       ),
     );
   }
