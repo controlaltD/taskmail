@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../models/email_message.dart';
+import '../../compose/compose_controller.dart';
 import '../ai_chat_controller.dart';
 import '../inbox_controller.dart';
 import '../mail_layout_controller.dart';
@@ -249,24 +250,22 @@ class _QuickReplyResult extends ConsumerWidget {
           data: (reply) => _SuggestionCard(
             title: '✍️ Válaszjavaslat',
             body: reply.bodyText,
-            // A tényleges levélírás a következő fázisban készül el; addig a
-            // szöveg kimásolható, hogy már most használható legyen.
+            // A javaslat nem megy el magától: a levélíróba töltjük, hogy a
+            // felhasználó átolvashassa és szerkeszthesse küldés előtt.
             action: _SmallButton(
-              label: 'Másolás',
-              onPressed: () => _copy(context, reply.bodyText),
+              label: 'Válasz megnyitása',
+              onPressed: () {
+                final message = ref.read(expandedMessageProvider);
+                if (message == null) return;
+                context.push(
+                  '/compose',
+                  extra: ComposeDraft.replyTo(message, bodyText: reply.bodyText),
+                );
+              },
             ),
           ),
         );
   }
-}
-
-void _copy(BuildContext context, String text) {
-  // A vágólapra másoláshoz nem kell külön csomag.
-  // ignore: discarded_futures
-  Clipboard.setData(ClipboardData(text: text));
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(content: Text('A válaszjavaslat a vágólapra került.')),
-  );
 }
 
 class _CardShell extends StatelessWidget {

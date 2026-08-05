@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../../models/mail_folder.dart';
+import '../../compose/compose_controller.dart';
 import '../inbox_controller.dart';
 import 'mail_row.dart';
 
@@ -13,6 +15,8 @@ class MailList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (folder == MailFolder.sent) return const _SentList();
+
     final messagesAsync = ref.watch(mailboxMessagesProvider(folder));
 
     return RefreshIndicator(
@@ -29,6 +33,56 @@ class MailList extends ConsumerWidget {
             padding: const EdgeInsets.only(bottom: 24),
             itemCount: messages.length,
             itemBuilder: (context, i) => MailRow(message: messages[i]),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Az elküldött levelek külön táblából jönnek, és nem nyithatók ki: a saját
+/// levelünk tartalma teljes egészében megvan, nincs mit utólag letölteni.
+class _SentList extends ConsumerWidget {
+  const _SentList();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sentAsync = ref.watch(sentMessagesProvider);
+
+    return RefreshIndicator(
+      onRefresh: () async => ref.invalidate(sentMessagesProvider),
+      child: sentAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, _) => _ErrorState(message: '$err'),
+        data: (messages) {
+          if (messages.isEmpty) return const _EmptyState(folder: MailFolder.sent);
+          return ListView.separated(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.only(bottom: 24),
+            itemCount: messages.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (context, i) {
+              final message = messages[i];
+              return ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                title: Text(
+                  message.subject.isEmpty ? '(nincs tárgy)' : message.subject,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  'Címzett: ${message.toAddresses.join(', ')}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11.5),
+                ),
+                trailing: Text(
+                  DateFormat('MM.dd HH:mm').format(message.sentAt),
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                ),
+              );
+            },
           );
         },
       ),

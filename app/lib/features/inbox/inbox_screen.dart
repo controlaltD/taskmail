@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../models/mail_folder.dart';
 import 'mail_layout_controller.dart';
@@ -69,6 +70,8 @@ class InboxScreen extends ConsumerWidget {
 
         // Telefon: mindkét oldalsó panel fiókban, a lista kapja a teljes
         // szélességet. A levél helyben nyílik ki, ugyanúgy, mint máshol.
+        // A levélírás itt lebegő gombra kerül, mert az oldalsáv (rajta az
+        // "Új levél" gombbal) fiókban van.
         return Scaffold(
           appBar: AppBar(
             title: Text(folder.title),
@@ -76,6 +79,11 @@ class InboxScreen extends ConsumerWidget {
           ),
           drawer: const Drawer(child: SafeArea(child: MailSidebar())),
           endDrawer: const Drawer(child: AiPanel(inDrawer: true)),
+          floatingActionButton: FloatingActionButton(
+            tooltip: 'Új levél',
+            onPressed: () => context.push('/compose'),
+            child: const Icon(Icons.edit_rounded),
+          ),
           body: MailList(folder: folder),
         );
       },

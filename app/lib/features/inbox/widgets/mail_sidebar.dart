@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../models/mail_folder.dart';
@@ -36,6 +37,8 @@ class MailSidebar extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            _ComposeButton(collapsed: collapsed),
+            const SizedBox(height: 6),
             if (iconsOnly)
               const SizedBox(height: 8)
             else
@@ -86,6 +89,48 @@ class MailSidebar extends ConsumerWidget {
               collapsed: collapsed,
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ComposeButton extends StatelessWidget {
+  const _ComposeButton({required this.collapsed});
+
+  final bool collapsed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.primary,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => context.push('/compose'),
+        child: Tooltip(
+          message: collapsed ? 'Új levél' : '',
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: collapsed ? 0 : 12, vertical: 10),
+            child: Row(
+              mainAxisAlignment:
+                  collapsed ? MainAxisAlignment.center : MainAxisAlignment.start,
+              children: [
+                const Icon(Icons.add_rounded, size: 17, color: Colors.white),
+                if (!collapsed) ...[
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Új levél',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );

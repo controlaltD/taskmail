@@ -6,6 +6,8 @@ import '../../features/accounts/accounts_screen.dart';
 import '../../features/auth/auth_controller.dart';
 import '../../features/auth/login_screen.dart';
 import '../../features/board/board_screen.dart';
+import '../../features/compose/compose_controller.dart';
+import '../../features/compose/compose_screen.dart';
 import '../../features/inbox/inbox_screen.dart';
 
 class _HomeShell extends StatelessWidget {
@@ -58,6 +60,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     refreshListenable: _GoRouterRefreshStream(ref),
     routes: [
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
+      // A levélírás a fő navigáción kívül él, mint a bejelentkezés: teljes
+      // képernyőt kap, és nincs alatta fülsáv, ami elvonná a figyelmet.
+      GoRoute(
+        path: '/compose',
+        builder: (context, state) => ComposeScreen(
+          draft: state.extra as ComposeDraft? ?? const ComposeDraft(),
+        ),
+      ),
       ShellRoute(
         builder: (context, state, child) => _HomeShell(location: state.matchedLocation, child: child),
         routes: [
