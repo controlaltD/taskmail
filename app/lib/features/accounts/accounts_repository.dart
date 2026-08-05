@@ -27,10 +27,18 @@ class AccountsRepository {
   /// a felhasználó Supabase hozzáférési tokenje került az URL-be, ami a
   /// Google/Microsoft naplóin és a böngésző előzményein keresztül
   /// kiszivárogtatta a munkamenetet.
-  Future<bool> _connect(String provider) async {
+  Future<bool> _connect(
+    String provider, {
+    String scopeTier = 'send',
+    String? loginHint,
+  }) async {
     final response = await supabase.functions.invoke(
       'oauth-start',
-      body: {'provider': provider},
+      body: {
+        'provider': provider,
+        'scopeTier': scopeTier,
+        if (loginHint != null) 'loginHint': loginHint,
+      },
     );
 
     final authUrl = (response.data as Map?)?['url'] as String?;
@@ -48,6 +56,14 @@ class AccountsRepository {
   Future<bool> connectGmail() => _connect('gmail');
 
   Future<bool> connectOutlook() => _connect('outlook');
+
+  /// Meglévő, csak olvasásra jogosult kapcsolat bővítése küldési joggal.
+  /// A `loginHint` miatt a szolgáltató ugyanazt a fiókot ajánlja fel, így a
+  /// meglévő kapcsolat bővül, nem egy új jön létre mellé.
+  Future<bool> upgradeScope(EmailAccount account) => _connect(
+        account.provider.dbValue,
+        loginHint: account.emailAddress,
+      );
 
   /// Az AI-feldolgozás fiókonkénti engedélyezése. Amíg ki van kapcsolva, a
   /// levelek tartalma nem hagyja el a rendszert.

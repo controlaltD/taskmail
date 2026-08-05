@@ -21,6 +21,20 @@ extension SyncStatusX on SyncStatus {
       SyncStatus.values.firstWhere((s) => s.dbValue == value, orElse: () => SyncStatus.pending);
 }
 
+/// A fiókhoz tárolt hozzáférés jogosultsági szintje. A `readonly` szintű
+/// kapcsolat csak olvasni tud — küldéshez a felhasználónak újra engedélyeznie
+/// kell a hozzáférést a szolgáltatónál.
+enum ScopeTier { readonly, send }
+
+extension ScopeTierX on ScopeTier {
+  String get dbValue => name;
+
+  static ScopeTier fromDb(String? value) =>
+      ScopeTier.values.firstWhere((t) => t.dbValue == value, orElse: () => ScopeTier.readonly);
+
+  bool get canSend => this == ScopeTier.send;
+}
+
 /// `taskmail_email_accounts` sor. A tokeneket a kliens SOSE látja —
 /// azokat az Edge Function-ök kezelik szerver oldalon, titkosítva.
 class EmailAccount {
@@ -35,6 +49,9 @@ class EmailAccount {
   /// A felhasználó kifejezetten hozzájárult, hogy a levelek tartalma
   /// AI-feldolgozásra külső szolgáltatóhoz (Anthropic) kerüljön.
   final bool aiEnabled;
+
+  /// Meddig terjed a fiókhoz kapott hozzáférés (olvasás / olvasás+küldés).
+  final ScopeTier scopeTier;
   final DateTime createdAt;
 
   const EmailAccount({
@@ -46,6 +63,7 @@ class EmailAccount {
     this.syncError,
     this.lastSyncedAt,
     this.aiEnabled = false,
+    this.scopeTier = ScopeTier.readonly,
     required this.createdAt,
   });
 
@@ -59,6 +77,7 @@ class EmailAccount {
         lastSyncedAt:
             json['last_synced_at'] != null ? DateTime.tryParse(json['last_synced_at'] as String) : null,
         aiEnabled: json['ai_enabled'] as bool? ?? false,
+        scopeTier: ScopeTierX.fromDb(json['granted_scope_tier'] as String?),
         createdAt: DateTime.parse(json['created_at'] as String),
       );
 }

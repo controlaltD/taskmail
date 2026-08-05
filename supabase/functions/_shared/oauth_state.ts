@@ -6,11 +6,12 @@
 // visszajátszani ne lehessen.
 
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isScopeTier, type Provider, type ScopeTier } from "./oauth_scopes.ts";
 
 /** Ennyi ideig érvényes egy megkezdett OAuth folyamat. */
 const STATE_TTL_MS = 10 * 60 * 1000;
 
-export type Provider = "gmail" | "outlook";
+export type { Provider };
 
 export function generateNonce(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
@@ -25,11 +26,18 @@ export async function createState(
   userId: string,
   provider: Provider,
   codeVerifier: string,
+  scopeTier: ScopeTier,
 ): Promise<string> {
   const nonce = generateNonce();
   const { error } = await supabase
     .from("taskmail_oauth_state")
-    .insert({ nonce, user_id: userId, provider, code_verifier: codeVerifier });
+    .insert({
+      nonce,
+      user_id: userId,
+      provider,
+      code_verifier: codeVerifier,
+      scope_tier: scopeTier,
+    });
   if (error) throw new Error(`Nem sikerült létrehozni az OAuth state-et: ${error.message}`);
   return nonce;
 }
@@ -37,6 +45,7 @@ export async function createState(
 export interface ConsumedState {
   userId: string;
   codeVerifier: string | null;
+  scopeTier: ScopeTier;
 }
 
 /**
@@ -57,7 +66,7 @@ export async function consumeState(
     .delete()
     .eq("nonce", nonce)
     .eq("provider", provider)
-    .select("user_id, created_at, code_verifier")
+    .select("user_id, created_at, code_verifier, scope_tier")
     .maybeSingle();
 
   if (error || !data) return null;
@@ -65,8 +74,14 @@ export async function consumeState(
   const age = Date.now() - new Date(data.created_at as string).getTime();
   if (age > STATE_TTL_MS) return null;
 
+  // Ismeretlen érték esetén a szűkebb jogot feltételezzük: a fiók sorára
+  // beírt szint dönti el később, hogy engedünk-e küldést, ezért itt tévedni
+  // csak a biztonságos irányba szabad.
+  const rawTier = data.scope_tier;
+
   return {
     userId: data.user_id as string,
     codeVerifier: (data.code_verifier as string | null) ?? null,
+    scopeTier: isScopeTier(rawTier) ? rawTier : "readonly",
   };
 }

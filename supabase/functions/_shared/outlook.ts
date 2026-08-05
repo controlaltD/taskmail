@@ -1,5 +1,7 @@
 // Microsoft Graph API integráció: OAuth code→token csere és új levelek lekérése.
 
+import { OUTLOOK_SCOPES, type ScopeTier } from "./oauth_scopes.ts";
+
 const TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
 const GRAPH_API = "https://graph.microsoft.com/v1.0";
 
@@ -13,6 +15,7 @@ export async function exchangeOutlookCode(
   code: string,
   redirectUri: string,
   codeVerifier: string | null,
+  scopeTier: ScopeTier,
 ): Promise<OAuthTokens> {
   const params: Record<string, string> = {
     code,
@@ -20,7 +23,7 @@ export async function exchangeOutlookCode(
     client_secret: Deno.env.get("MICROSOFT_CLIENT_SECRET") ?? "",
     redirect_uri: redirectUri,
     grant_type: "authorization_code",
-    scope: "offline_access Mail.Read",
+    scope: OUTLOOK_SCOPES[scopeTier],
   };
   if (codeVerifier) params.code_verifier = codeVerifier;
 
@@ -39,6 +42,10 @@ export async function exchangeOutlookCode(
 }
 
 export async function refreshOutlookToken(refreshToken: string): Promise<OAuthTokens> {
+  // A `scope` szándékosan hiányzik: a Microsoft ilyenkor az eredetileg
+  // engedélyezett jogosultságokkal adja vissza a tokent. Ha itt fixen
+  // megadnánk, egy scope-bővítés után a frissítés visszaszűkítené a
+  // hozzáférést a régi szintre.
   const res = await fetch(TOKEN_URL, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -47,7 +54,6 @@ export async function refreshOutlookToken(refreshToken: string): Promise<OAuthTo
       client_id: Deno.env.get("MICROSOFT_CLIENT_ID") ?? "",
       client_secret: Deno.env.get("MICROSOFT_CLIENT_SECRET") ?? "",
       grant_type: "refresh_token",
-      scope: "offline_access Mail.Read",
     }),
   });
   if (!res.ok) throw new Error(`Outlook token frissítés sikertelen: ${await res.text()}`);

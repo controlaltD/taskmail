@@ -61,7 +61,8 @@ A `SUPABASE_URL`/`SUPABASE_ANON_KEY` **ugyanaz**, mint a `serveos`/
 ## Supabase beállítás
 
 1. Supabase Dashboard → SQL Editor → futtasd sorrendben a
-   `supabase/migrations/` fájljait (`0001` → `0002` → `0003` → `0004`),
+   `supabase/migrations/` fájljait (`0001` → `0002` → `0003` → `0004` →
+   `0005`),
    ugyanabban a projektben, mint ahol a `serveos_admin`/`serveos` migrációi
    már lefutottak — a `venues`/`venue_users` tábláknak léteznie kell előtte,
    és a `serveos` repo `pin-login` Edge Function-jének is telepítve kell
@@ -106,11 +107,24 @@ A `SUPABASE_URL`/`SUPABASE_ANON_KEY` **ugyanaz**, mint a `serveos`/
 - **Google Cloud Console** → új projekt vagy meglévő → OAuth consent screen →
   OAuth Client ID (Web application) → Authorized redirect URI:
   `https://<project-ref>.supabase.co/functions/v1/gmail-oauth-callback`
-  → Scope: `https://www.googleapis.com/auth/gmail.readonly`
+  → Scope-ok: `https://www.googleapis.com/auth/gmail.readonly` **és**
+  `https://www.googleapis.com/auth/gmail.send`
 - **Microsoft Entra admin center** → App registrations → New registration →
   Redirect URI (Web):
   `https://<project-ref>.supabase.co/functions/v1/outlook-oauth-callback`
-  → API permissions: `Mail.Read`, `offline_access`
+  → API permissions: `Mail.Read`, `Mail.Send`, `offline_access`
+
+A küldési jog (`gmail.send` / `Mail.Send`) a levélírás/válasz funkcióhoz kell.
+A Google a bővebb Gmail scope-okhoz alkalmazás-ellenőrzést kérhet, aminek
+átfutási ideje van — érdemes ezzel kezdeni, mert a többi fejlesztés
+párhuzamosan haladhat. A scope-ok egyetlen helyen, a
+`supabase/functions/_shared/oauth_scopes.ts` fájlban vannak definiálva.
+
+A már összekötött fiókok automatikusan `readonly` szinten maradnak (a tárolt
+tokenjük tényleg csak olvasni tud). Az appban, a Fiókok fülön fiókonként
+jelenik meg egy „Jogosultság bővítése" gomb, ami újra végigviszi a
+felhasználót a szolgáltató hozzájárulási képernyőjén — új kapcsolat viszont
+már alapból a bővebb jogot kéri, egy lépésben.
 
 A mobil/desktop appok `hu.serveos.taskmail://oauth-callback` custom URL
 scheme-mel kapják vissza az irányítást (`flutter_web_auth_2`) — ezt a

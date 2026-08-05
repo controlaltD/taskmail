@@ -67,6 +67,8 @@ Deno.serve(async (req) => {
           ? await encryptToken(tokens.refreshToken, aad)
           : null,
         token_expires_at: tokens.expiresAt.toISOString(),
+        granted_scope_tier: state.scopeTier,
+        scope_upgraded_at: state.scopeTier === "send" ? new Date().toISOString() : null,
       })
       .eq("id", account.id);
 

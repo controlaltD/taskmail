@@ -34,7 +34,12 @@ Deno.serve(async (req) => {
 
   try {
     const redirectUri = `${url.origin}${url.pathname}`;
-    const tokens = await exchangeOutlookCode(code, redirectUri, state.codeVerifier);
+    const tokens = await exchangeOutlookCode(
+      code,
+      redirectUri,
+      state.codeVerifier,
+      state.scopeTier,
+    );
     const emailAddress = await fetchOutlookProfile(tokens.accessToken);
 
     // A titkosítás a fiók sorához van kötve (AAD), ezért előbb meg kell
@@ -64,6 +69,8 @@ Deno.serve(async (req) => {
           ? await encryptToken(tokens.refreshToken, aad)
           : null,
         token_expires_at: tokens.expiresAt.toISOString(),
+        granted_scope_tier: state.scopeTier,
+        scope_upgraded_at: state.scopeTier === "send" ? new Date().toISOString() : null,
       })
       .eq("id", account.id);
 

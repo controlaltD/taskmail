@@ -161,6 +161,37 @@ class _AccountTile extends ConsumerWidget {
             ],
           ),
         ),
+        // A csak olvasásra jogosult kapcsolatokból nem lehet levelet küldeni.
+        // Nem blokkoló figyelmeztetés: aki csak triázsolásra használja az
+        // appot, azt ne zavarjuk, de legyen egy kattintásra elérhető a
+        // bővítés.
+        if (!account.scopeTier.canSend)
+          Padding(
+            padding: const EdgeInsets.only(left: 16, bottom: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Ebből a fiókból küldeni nem lehet — a kapcsolat csak olvasási '
+                    'jogot kapott.',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: () async {
+                    final ok = await ref.read(accountsRepositoryProvider).upgradeScope(account);
+                    if (context.mounted && !ok) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('A jogosultság bővítése nem sikerült.')),
+                      );
+                    }
+                  },
+                  child: const Text('Jogosultság bővítése', style: TextStyle(fontSize: 12)),
+                ),
+              ],
+            ),
+          ),
         // A levelek AI-feldolgozása külön, kifejezett hozzájárulás — a
         // postafiók összekötése önmagában nem jelenti azt, hogy a tartalom
         // külső szolgáltatóhoz kerülhet.
