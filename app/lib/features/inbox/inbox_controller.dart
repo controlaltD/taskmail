@@ -2,23 +2,37 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/supabase/supabase_client.dart';
 import '../../models/email_message.dart';
+import '../../models/mail_folder.dart';
 import '../auth/auth_controller.dart';
 
-/// A bejelentkezett user leveleit adja vissza, AI kategorizálással —
-/// a `sync-emails` Edge Function tölti fel/frissíti a sorokat a háttérben.
-final inboxMessagesProvider = FutureProvider.autoDispose<List<EmailMessage>>((ref) async {
+/// Egy mappa (illetve AI-kategória szűrő) levelei.
+///
+/// A Piszkozatok/Elküldött nézetek a TaskMail saját nyilvántartásából
+/// olvasnának, ami a 4-5. fázisban készül el — addig üres listát adnak,
+/// nem hibát: a mappa létezik, csak még nincs benne semmi.
+final mailboxMessagesProvider =
+    FutureProvider.autoDispose.family<List<EmailMessage>, MailFolder>((ref, folder) async {
   final user = ref.watch(currentUserProvider);
   if (user == null) return const [];
+  if (!folder.readsInbox) return const [];
 
-  final rows = await supabase
-      .from('taskmail_email_messages')
-      .select()
-      .eq('user_id', user.id)
-      .order('received_at', ascending: false)
-      .limit(100);
+  var query = supabase.from('taskmail_email_messages').select().eq('user_id', user.id);
+
+  final category = folder.aiCategory;
+  if (category != null) {
+    query = query.eq('ai_category', category.dbValue);
+  }
+
+  final rows = await query.order('received_at', ascending: false).limit(100);
 
   return (rows as List).map((e) => EmailMessage.fromJson(e as Map<String, dynamic>)).toList();
 });
+
+/// A Bejövő mappa levelei — a keskeny (telefon) nézet és a levél-részlet
+/// képernyő használja, ahol nincs mappaválasztó.
+final inboxMessagesProvider = FutureProvider.autoDispose<List<EmailMessage>>(
+  (ref) => ref.watch(mailboxMessagesProvider(MailFolder.inbox).future),
+);
 
 /// Melyik levél van éppen kinyitva a listában. `null`, ha egyik sem.
 final expandedMessageIdProvider = StateProvider.autoDispose<String?>((ref) => null);

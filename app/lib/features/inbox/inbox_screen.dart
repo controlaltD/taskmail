@@ -1,79 +1,71 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'inbox_controller.dart';
-import 'widgets/mail_row.dart';
+import '../../models/mail_folder.dart';
+import 'mail_layout_controller.dart';
+import 'widgets/ai_panel.dart';
+import 'widgets/mail_list.dart';
+import 'widgets/mail_sidebar.dart';
+
+/// Efölött fér el egymás mellett a mappalista, a levéllista és az AI panel.
+const double _threePaneBreakpoint = 900;
 
 class InboxScreen extends ConsumerWidget {
   const InboxScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final messagesAsync = ref.watch(inboxMessagesProvider);
+    final folder = ref.watch(selectedFolderProvider);
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Postafiók')),
-      body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(inboxMessagesProvider),
-        child: messagesAsync.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (err, _) => _ErrorState(message: '$err'),
-          data: (messages) {
-            if (messages.isEmpty) return const _EmptyState();
-            // A sorok maguk rajzolják az elválasztójukat, mert kinyitva a
-            // levéltartalom is a soron belülre kerül.
-            return ListView.builder(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.only(bottom: 24),
-              itemCount: messages.length,
-              itemBuilder: (context, i) => MailRow(message: messages[i]),
-            );
-          },
-        ),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth >= _threePaneBreakpoint;
+
+        // Keskeny nézeten a mappalista fiókban kap helyet — a levéllista és a
+        // kinyíló levéltartalom ugyanaz marad, csak a két oldalsó panel
+        // költözik. Az AI panel keskenyen a következő fázisban kap saját
+        // felületet.
+        if (!wide) {
+          return Scaffold(
+            appBar: AppBar(title: Text(folder.title)),
+            drawer: const Drawer(child: SafeArea(child: MailSidebar())),
+            body: MailList(folder: folder),
+          );
+        }
+
+        return Scaffold(
+          body: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const MailSidebar(),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _ListHeader(folder: folder),
+                    Expanded(child: MailList(folder: folder)),
+                  ],
+                ),
+              ),
+              const AiPanel(),
+            ],
+          ),
+        );
+      },
     );
   }
 }
 
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
+class _ListHeader extends StatelessWidget {
+  const _ListHeader({required this.folder});
+
+  final MailFolder folder;
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('📭', style: TextStyle(fontSize: 48)),
-            SizedBox(height: 12),
-            Text('Még nincs csatlakoztatott postafiókod'),
-            SizedBox(height: 4),
-            Text(
-              'Kösd össze a Gmail vagy Outlook fiókodat a Fiókok fülön.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  const _ErrorState({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Text('Hiba történt: $message', textAlign: TextAlign.center),
-      ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 10),
+      child: Text(folder.title, style: Theme.of(context).textTheme.titleLarge),
     );
   }
 }
