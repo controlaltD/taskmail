@@ -62,7 +62,7 @@ A `SUPABASE_URL`/`SUPABASE_ANON_KEY` **ugyanaz**, mint a `serveos`/
 
 1. Supabase Dashboard → SQL Editor → futtasd sorrendben a
    `supabase/migrations/` fájljait (`0001` → `0002` → `0003` → `0004` →
-   `0005`),
+   `0005` → `0006`),
    ugyanabban a projektben, mint ahol a `serveos_admin`/`serveos` migrációi
    már lefutottak — a `venues`/`venue_users` tábláknak léteznie kell előtte,
    és a `serveos` repo `pin-login` Edge Function-jének is telepítve kell
@@ -81,8 +81,9 @@ A `SUPABASE_URL`/`SUPABASE_ANON_KEY` **ugyanaz**, mint a `serveos`/
      automatikusan beállítja minden Edge Function számára
 3. Edge Functions deploy:
    ```bash
-   # Ezt a kliens hívja a saját munkamenetével → JWT-ellenőrzés KELL
+   # Ezeket a kliens hívja a saját munkamenetével → JWT-ellenőrzés KELL
    supabase functions deploy oauth-start
+   supabase functions deploy fetch-email-body
 
    # Ezeket a Google/Microsoft hívja vissza, illetve a cron → nincs kliens-JWT
    supabase functions deploy gmail-oauth-callback --no-verify-jwt

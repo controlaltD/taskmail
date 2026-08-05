@@ -78,6 +78,43 @@ export interface OutlookMessage {
   receivedAt: Date;
 }
 
+/**
+ * Egy levél teljes tartalma. A Graph a Gmailnél egyszerűbb: nincs MIME-fa,
+ * a `body.content` már kész szöveg vagy HTML, a `contentType` dönti el melyik.
+ */
+export async function fetchOutlookMessageBody(
+  accessToken: string,
+  providerMessageId: string,
+): Promise<{
+  bodyText: string | null;
+  bodyHtml: string | null;
+  toAddresses: string[];
+  ccAddresses: string[];
+}> {
+  const res = await fetch(
+    `${GRAPH_API}/me/messages/${providerMessageId}?$select=body,toRecipients,ccRecipients`,
+    { headers: { authorization: `Bearer ${accessToken}` } },
+  );
+  if (!res.ok) throw new Error(`Outlook levél lekérés sikertelen: ${await res.text()}`);
+  const msg = await res.json();
+
+  const body = msg.body as { contentType?: string; content?: string } | undefined;
+  const isHtml = (body?.contentType ?? "").toLowerCase() === "html";
+  const content = body?.content ?? null;
+
+  const addresses = (list: unknown): string[] =>
+    ((list as Array<{ emailAddress?: { address?: string } }>) ?? [])
+      .map((r) => r.emailAddress?.address ?? "")
+      .filter((a) => a.length > 0);
+
+  return {
+    bodyText: isHtml ? null : content,
+    bodyHtml: isHtml ? content : null,
+    toAddresses: addresses(msg.toRecipients),
+    ccAddresses: addresses(msg.ccRecipients),
+  };
+}
+
 export async function fetchNewOutlookMessages(
   accessToken: string,
   sinceIso: string | null,

@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
-import '../../core/theme/app_theme.dart';
-import '../../models/email_message.dart';
 import 'inbox_controller.dart';
+import 'widgets/mail_row.dart';
 
 class InboxScreen extends ConsumerWidget {
   const InboxScreen({super.key});
@@ -22,77 +20,16 @@ class InboxScreen extends ConsumerWidget {
           error: (err, _) => _ErrorState(message: '$err'),
           data: (messages) {
             if (messages.isEmpty) return const _EmptyState();
-            return ListView.separated(
+            // A sorok maguk rajzolják az elválasztójukat, mert kinyitva a
+            // levéltartalom is a soron belülre kerül.
+            return ListView.builder(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.only(bottom: 24),
               itemCount: messages.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (context, i) => _EmailTile(message: messages[i]),
+              itemBuilder: (context, i) => MailRow(message: messages[i]),
             );
           },
         ),
-      ),
-    );
-  }
-}
-
-class _EmailTile extends StatelessWidget {
-  const _EmailTile({required this.message});
-
-  final EmailMessage message;
-
-  @override
-  Widget build(BuildContext context) {
-    final category = message.aiCategory;
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-      leading: CircleAvatar(
-        backgroundColor: AppColors.primary.withValues(alpha: 0.12),
-        child: Text(
-          (message.fromName?.isNotEmpty == true ? message.fromName! : message.fromAddress)
-              .substring(0, 1)
-              .toUpperCase(),
-          style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
-        ),
-      ),
-      title: Text(
-        message.subject,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(fontWeight: message.isRead ? FontWeight.normal : FontWeight.w700),
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            message.fromName ?? message.fromAddress,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          if (message.aiSummary != null) ...[
-            const SizedBox(height: 2),
-            Text(
-              message.aiSummary!,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-          ],
-        ],
-      ),
-      trailing: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(DateFormat('MM.dd HH:mm').format(message.receivedAt), style: const TextStyle(fontSize: 11)),
-          const SizedBox(height: 6),
-          if (category != null)
-            Chip(
-              label: Text(category.label),
-              visualDensity: VisualDensity.compact,
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-        ],
       ),
     );
   }

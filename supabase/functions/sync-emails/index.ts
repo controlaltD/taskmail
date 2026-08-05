@@ -4,7 +4,8 @@
 // sort a user alapértelmezett board-jának "todo" oszlopában.
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { classifyEmail } from "../_shared/claude.ts";
-import { decryptToken, encryptToken, safeCompare, tokenAad } from "../_shared/crypto.ts";
+import { safeCompare } from "../_shared/crypto.ts";
+import { ensureFreshAccessToken } from "../_shared/token_refresh.ts";
 
 /** Futásonként és fiókonként legfeljebb ennyi levelet dolgozunk fel. */
 const MAX_MESSAGES_PER_RUN = 50;
@@ -24,46 +25,13 @@ function classifyFailure(reason: unknown): string {
   if (/ANTHROPIC|claude/i.test(text)) return "ai_unavailable";
   return "sync_failed";
 }
-import { fetchNewGmailMessages, refreshGmailToken } from "../_shared/gmail.ts";
-import { fetchNewOutlookMessages, refreshOutlookToken } from "../_shared/outlook.ts";
+import { fetchNewGmailMessages } from "../_shared/gmail.ts";
+import { fetchNewOutlookMessages } from "../_shared/outlook.ts";
+import type { RefreshableAccount } from "../_shared/token_refresh.ts";
 
-interface Account {
-  id: string;
-  user_id: string;
-  provider: "gmail" | "outlook";
-  access_token_encrypted: string | null;
-  refresh_token_encrypted: string | null;
-  token_expires_at: string | null;
+interface Account extends RefreshableAccount {
   last_synced_at: string | null;
   ai_enabled: boolean;
-}
-
-async function ensureFreshAccessToken(supabase: SupabaseClient, account: Account): Promise<string | null> {
-  if (!account.access_token_encrypted) return null;
-  // Az AAD a sorhoz köti a titkosított értéket: egy másik fiók sorába
-  // átmásolt token visszafejtése itt hibára fut.
-  const aad = tokenAad(account.id, account.user_id);
-
-  const expiresAt = account.token_expires_at ? new Date(account.token_expires_at) : null;
-  const stillValid = expiresAt && expiresAt.getTime() - Date.now() > 60_000;
-  if (stillValid) return decryptToken(account.access_token_encrypted, aad);
-
-  if (!account.refresh_token_encrypted) return decryptToken(account.access_token_encrypted, aad);
-  const refreshToken = await decryptToken(account.refresh_token_encrypted, aad);
-
-  const refreshed = account.provider === "gmail"
-    ? await refreshGmailToken(refreshToken)
-    : await refreshOutlookToken(refreshToken);
-
-  await supabase
-    .from("taskmail_email_accounts")
-    .update({
-      access_token_encrypted: await encryptToken(refreshed.accessToken, aad),
-      token_expires_at: refreshed.expiresAt.toISOString(),
-    })
-    .eq("id", account.id);
-
-  return refreshed.accessToken;
 }
 
 async function getOrCreateDefaultBoardId(supabase: SupabaseClient, userId: string): Promise<string> {
