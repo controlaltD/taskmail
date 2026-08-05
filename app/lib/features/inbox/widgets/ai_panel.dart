@@ -11,48 +11,55 @@ const double kAiPanelCollapsedWidth = 52;
 /// Jobb oldali AI panel. A tartalma (javaslatok, chat) a következő fázisban
 /// készül el — a helye, a nyit/zár működése és az üres állapot már itt van,
 /// hogy az elrendezés véglegesen a helyére kerüljön.
+///
+/// Széles nézeten önálló hasábként ül a levéllista mellett; keskenyebb
+/// nézeteken fiókként (`endDrawer`) nyílik, hogy ne szorítsa össze a listát.
 class AiPanel extends ConsumerWidget {
-  const AiPanel({super.key});
+  const AiPanel({super.key, this.inDrawer = false});
+
+  /// Fiókban jelenik-e meg. Ilyenkor nincs összecsukott állapot: a fiók
+  /// megnyitása maga a "kinyitás".
+  final bool inDrawer;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final collapsed = ref.watch(aiPanelCollapsedProvider);
-    final expandedId = ref.watch(expandedMessageIdProvider);
     final theme = Theme.of(context);
+    final collapsed = !inDrawer && ref.watch(aiPanelCollapsedProvider);
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOut,
-      width: collapsed ? kAiPanelCollapsedWidth : kAiPanelWidth,
-      decoration: BoxDecoration(
-        border: Border(left: BorderSide(color: theme.dividerColor.withValues(alpha: 0.5))),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(collapsed ? 0 : 16, 12, collapsed ? 0 : 8, 4),
-            child: Row(
-              mainAxisAlignment:
-                  collapsed ? MainAxisAlignment.center : MainAxisAlignment.spaceBetween,
-              children: [
-                if (!collapsed)
-                  Row(
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            colors: [AppColors.primary, AppColors.accent],
-                          ),
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: EdgeInsets.fromLTRB(collapsed ? 0 : 16, 12, collapsed ? 0 : 8, 4),
+          child: Row(
+            mainAxisAlignment:
+                collapsed ? MainAxisAlignment.center : MainAxisAlignment.spaceBetween,
+            children: [
+              if (!collapsed)
+                Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: [AppColors.primary, AppColors.accent],
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Text('AI', style: theme.textTheme.titleSmall),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text('AI', style: theme.textTheme.titleSmall),
+                  ],
+                ),
+              if (inDrawer)
+                IconButton(
+                  tooltip: 'Bezárás',
+                  iconSize: 18,
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () => Navigator.of(context).maybePop(),
+                )
+              else
                 IconButton(
                   tooltip: collapsed ? 'AI panel megnyitása' : 'AI panel összecsukása',
                   iconSize: 18,
@@ -62,20 +69,31 @@ class AiPanel extends ConsumerWidget {
                   onPressed: () =>
                       ref.read(aiPanelCollapsedProvider.notifier).state = !collapsed,
                 ),
-              ],
+            ],
+          ),
+        ),
+        if (!collapsed)
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: ref.watch(expandedMessageIdProvider) == null
+                  ? const _IdleState()
+                  : const _ComingSoonState(),
             ),
           ),
-          if (!collapsed)
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                child: expandedId == null
-                    ? const _IdleState()
-                    : const _ComingSoonState(),
-              ),
-            ),
-        ],
+      ],
+    );
+
+    if (inDrawer) return SafeArea(child: content);
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+      width: collapsed ? kAiPanelCollapsedWidth : kAiPanelWidth,
+      decoration: BoxDecoration(
+        border: Border(left: BorderSide(color: theme.dividerColor.withValues(alpha: 0.5))),
       ),
+      child: content,
     );
   }
 }

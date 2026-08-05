@@ -7,8 +7,12 @@ import 'widgets/ai_panel.dart';
 import 'widgets/mail_list.dart';
 import 'widgets/mail_sidebar.dart';
 
-/// Efölött fér el egymás mellett a mappalista, a levéllista és az AI panel.
-const double _threePaneBreakpoint = 900;
+/// Efölött fér el egymás mellett mind a három hasáb.
+const double kDesktopBreakpoint = 900;
+
+/// Efölött van hely egy állandó mappa-ikonsávnak a lista mellett (tablet).
+/// Ez alatt a mappák is fiókba költöznek (telefon).
+const double kTabletBreakpoint = 600;
 
 class InboxScreen extends ConsumerWidget {
   const InboxScreen({super.key});
@@ -19,39 +23,75 @@ class InboxScreen extends ConsumerWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final wide = constraints.maxWidth >= _threePaneBreakpoint;
+        final width = constraints.maxWidth;
 
-        // Keskeny nézeten a mappalista fiókban kap helyet — a levéllista és a
-        // kinyíló levéltartalom ugyanaz marad, csak a két oldalsó panel
-        // költözik. Az AI panel keskenyen a következő fázisban kap saját
-        // felületet.
-        if (!wide) {
+        // Desktop: mind a három hasáb egymás mellett, semmi nincs elrejtve.
+        if (width >= kDesktopBreakpoint) {
           return Scaffold(
-            appBar: AppBar(title: Text(folder.title)),
-            drawer: const Drawer(child: SafeArea(child: MailSidebar())),
-            body: MailList(folder: folder),
+            body: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const MailSidebar(),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _ListHeader(folder: folder),
+                      Expanded(child: MailList(folder: folder)),
+                    ],
+                  ),
+                ),
+                const AiPanel(),
+              ],
+            ),
           );
         }
 
+        // Tablet: a mappák ikonsávként a helyükön maradnak (nem kell fiókot
+        // nyitni a váltáshoz), az AI panel viszont fiókból jön elő — így nem
+        // szorítja két keskeny hasábra a levéllistát.
+        if (width >= kTabletBreakpoint) {
+          return Scaffold(
+            appBar: AppBar(
+              title: Text(folder.title),
+              actions: [const _AiPanelButton()],
+            ),
+            endDrawer: const Drawer(child: AiPanel(inDrawer: true)),
+            body: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const MailSidebar(iconsOnly: true),
+                Expanded(child: MailList(folder: folder)),
+              ],
+            ),
+          );
+        }
+
+        // Telefon: mindkét oldalsó panel fiókban, a lista kapja a teljes
+        // szélességet. A levél helyben nyílik ki, ugyanúgy, mint máshol.
         return Scaffold(
-          body: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const MailSidebar(),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _ListHeader(folder: folder),
-                    Expanded(child: MailList(folder: folder)),
-                  ],
-                ),
-              ),
-              const AiPanel(),
-            ],
+          appBar: AppBar(
+            title: Text(folder.title),
+            actions: [const _AiPanelButton()],
           ),
+          drawer: const Drawer(child: SafeArea(child: MailSidebar())),
+          endDrawer: const Drawer(child: AiPanel(inDrawer: true)),
+          body: MailList(folder: folder),
         );
       },
+    );
+  }
+}
+
+class _AiPanelButton extends StatelessWidget {
+  const _AiPanelButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: 'AI panel',
+      icon: const Icon(Icons.auto_awesome_rounded),
+      onPressed: () => Scaffold.of(context).openEndDrawer(),
     );
   }
 }

@@ -11,11 +11,16 @@ const double kSidebarCollapsedWidth = 60;
 /// Bal oldali mappalista. Összecsukva csak az ikonok látszanak, hogy a
 /// levéllista több helyet kapjon.
 class MailSidebar extends ConsumerWidget {
-  const MailSidebar({super.key});
+  const MailSidebar({super.key, this.iconsOnly = false});
+
+  /// Fixen ikonsáv módban jelenik-e meg. Közepes (tablet) szélességen ez a
+  /// mód fut: a teljes mappalista elvenné a helyet a levelektől, viszont a
+  /// mappák így is egy koppintásra elérhetők maradnak, fiók nélkül.
+  final bool iconsOnly;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final collapsed = ref.watch(sidebarCollapsedProvider);
+    final collapsed = iconsOnly || ref.watch(sidebarCollapsedProvider);
     final selected = ref.watch(selectedFolderProvider);
     final theme = Theme.of(context);
 
@@ -31,16 +36,19 @@ class MailSidebar extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Align(
-              alignment: collapsed ? Alignment.center : Alignment.centerRight,
-              child: IconButton(
-                tooltip: collapsed ? 'Mappák megnyitása' : 'Mappák összecsukása',
-                iconSize: 18,
-                icon: Icon(collapsed ? Icons.chevron_right_rounded : Icons.chevron_left_rounded),
-                onPressed: () =>
-                    ref.read(sidebarCollapsedProvider.notifier).state = !collapsed,
+            if (iconsOnly)
+              const SizedBox(height: 8)
+            else
+              Align(
+                alignment: collapsed ? Alignment.center : Alignment.centerRight,
+                child: IconButton(
+                  tooltip: collapsed ? 'Mappák megnyitása' : 'Mappák összecsukása',
+                  iconSize: 18,
+                  icon: Icon(collapsed ? Icons.chevron_right_rounded : Icons.chevron_left_rounded),
+                  onPressed: () =>
+                      ref.read(sidebarCollapsedProvider.notifier).state = !collapsed,
+                ),
               ),
-            ),
             const SizedBox(height: 4),
             _FolderTile(
               folder: MailFolder.inbox,
